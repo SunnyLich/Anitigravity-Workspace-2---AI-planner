@@ -1,0 +1,340 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --bg-deep: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-glass: rgba(30, 41, 59, 0.7);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --accent: #f43f5e;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-deep);
+  color: var(--text-main);
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+}
+
+.workspace-window {
+  position: absolute;
+  z-index: 20;
+  max-width: 400px;
+  width: 90%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.window-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-glass);
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.window-header:active {
+  cursor: grabbing;
+}
+
+.window-content {
+  padding: 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1rem;
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+/* App Dock */
+.app-dock {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass);
+  padding: 0.5rem;
+  border-radius: 24px;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 100;
+  box-shadow: var(--glass-shadow);
+}
+
+.dock-item {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.dock-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  transform: translateY(-4px);
+}
+
+.dock-item.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.dock-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  width: 4px;
+  height: 4px;
+  background: var(--primary);
+  border-radius: 50%;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ============================================================
+   Leaflet Z-Index Fix
+   Leaflet's default pane z-indices go up to 700 (popup pane),
+   which causes them to sit above our UI (z-index 400-500).
+   We cap all panes to stay below our UI layer.
+   ============================================================ */
+.leaflet-map-pane {
+  z-index: 1 !important;
+}
+
+.leaflet-tile-pane {
+  z-index: 2 !important;
+}
+
+.leaflet-overlay-pane {
+  z-index: 3 !important;
+}
+
+.leaflet-shadow-pane {
+  z-index: 4 !important;
+}
+
+.leaflet-marker-pane {
+  z-index: 5 !important;
+}
+
+.leaflet-tooltip-pane {
+  z-index: 6 !important;
+}
+
+.leaflet-popup-pane {
+  z-index: 7 !important;
+}
+
+/* Leaflet container and tile styling */
+.leaflet-container {
+  background-color: #0f172a !important;
+  /* Prevent Leaflet container from creating a new stacking context above our UI */
+  isolation: auto !important;
+}
+
+.leaflet-tile {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+.leaflet-bar {
+  border: none !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+.leaflet-bar a {
+  background: var(--bg-surface) !important;
+  color: var(--text-main) !important;
+  border-bottom: 1px solid var(--border-glass) !important;
+}
+
+.leaflet-control-zoom {
+  margin-top: 80px !important;
+}
+
+/* ============================================================
+   POI Tooltip Styles
+   ============================================================ */
+.leaflet-tooltip.poi-tooltip {
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color: #f8fafc;
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.leaflet-tooltip.poi-tooltip::before {
+  border-top-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.poi-tooltip-icon {
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.poi-tooltip-type {
+  font-size: 10px;
+  color: #94a3b8;
+  display: block;
+  margin-top: 1px;
+}
+
+/* ============================================================
+   POI Popup Styles
+   ============================================================ */
+.leaflet-popup.poi-popup .leaflet-popup-content-wrapper {
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  color: #f8fafc;
+  font-family: 'Outfit', sans-serif;
+  padding: 0;
+  min-width: 220px;
+}
+
+.leaflet-popup.poi-popup .leaflet-popup-tip {
+  background: rgba(15, 23, 42, 0.96);
+}
+
+.leaflet-popup.poi-popup .leaflet-popup-content {
+  margin: 0;
+}
+
+.poi-popup-content {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.poi-popup-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-left: 3px solid var(--primary);
+  padding-left: 10px;
+}
+
+.poi-popup-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.poi-popup-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.poi-popup-type {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+  text-transform: capitalize;
+}
+
+.poi-popup-row {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.poi-popup-row a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.poi-popup-row a:hover {
+  text-decoration: underline;
+}
