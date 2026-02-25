@@ -3,10 +3,30 @@
  * Documentation: https://nominatim.org/release-docs/latest/api/Search/
  */
 
-export const searchLocations = async (query) => {
+const LONDON_VIEWBOX = {
+    left: -81.62,
+    top: 43.20,
+    right: -80.96,
+    bottom: 42.74,
+};
+
+export const searchLocations = async (query, options = {}) => {
     if (!query || query.length < 3) return [];
 
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`;
+    const limit = options.limit || 5;
+    const countryCode = options.countryCode || 'ca';
+    const viewbox = options.viewbox || LONDON_VIEWBOX;
+
+    const params = new URLSearchParams({
+        format: 'json',
+        q: query,
+        limit: String(limit),
+        countrycodes: countryCode,
+        bounded: '1',
+        viewbox: `${viewbox.left},${viewbox.top},${viewbox.right},${viewbox.bottom}`,
+    });
+
+    const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
 
     try {
         const response = await fetch(url, {
@@ -25,7 +45,8 @@ export const searchLocations = async (query) => {
             name: item.display_name,
             lat: parseFloat(item.lat),
             lng: parseFloat(item.lon),
-            importance: item.importance
+            importance: item.importance,
+            source: 'nominatim',
         }));
     } catch (error) {
         console.error('Geocoding error:', error);

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Minus, MapPin, Search, Footprints, Car, Train, Calendar, Trash2 } from 'lucide-react';
 import { searchLocations } from '../services/nominatim';
+import { dedupeLocations, locationSearchText, normalizeLocation } from '../utils/locationModel';
+import { buildLocalSearchIndex, matchesLondonHint, searchLocalIndex } from '../utils/localSearch';
 
 const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style }) => {
     return (
@@ -29,39 +31,66 @@ const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style
 const TripFormWindow = ({
     isOpen,
     onClose,
+    locations,
+    travelMethod,
+    setTravelMethod,
+    onAddLocation,
+    onRemoveLocation,
     onOptimize,
     onMinimize,
     onEstimateRoute,
     routeEstimate,
     isRouting,
+    pois,
+    customNodes,
+    selectedStartId,
+    selectedDestinationId,
+    onSetStart,
+    onSetDestination,
+    onEditCustomNode,
+    onDeleteCustomNode,
 }) => {
-    const [locations, setLocations] = useState([]);
-    const [travelMethod, setTravelMethod] = useState('walk');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
+    const [showSavedNodes, setShowSavedNodes] = useState(true);
+
+    const localSearchIndex = useMemo(
+        () => buildLocalSearchIndex({ pois, customNodes }),
+        [pois, customNodes]
+    );
 
     if (!isOpen) return null;
 
     const handleSearch = async (e) => {
         const query = e.target.value;
         setSearchQuery(query);
-        if (query.length > 2) {
-            const results = await searchLocations(query);
-            setSearchResults(results);
-        } else {
+
+        if (query.length <= 2) {
             setSearchResults([]);
+            return;
         }
+
+        const localMatches = searchLocalIndex(localSearchIndex, query, 8);
+
+        let externalMatches = [];
+        if (localMatches.length < 8) {
+            const external = await searchLocations(query, { limit: 8 - localMatches.length });
+            externalMatches = external
+                .map(item => normalizeLocation(item, 'nominatim'))
+                .filter(Boolean)
+                .sort((a, b) => Number(matchesLondonHint(b)) - Number(matchesLondonHint(a)));
+        }
+
+        setSearchResults(dedupeLocations([...localMatches, ...externalMatches]).slice(0, 8));
     };
 
     const addLocation = (loc) => {
-        setLocations([...locations, {
-            ...loc,
-            openingHours: { start: "09:00", end: "18:00" },
-            duration: 60
-        }]);
+        onAddLocation(loc);
         setSearchQuery('');
         setSearchResults([]);
     };
+
+    const selectorOptions = [...locations, ...customNodes];
 
     return (
         <WindowWrapper
@@ -79,7 +108,9 @@ const TripFormWindow = ({
                             <button
                                 key={m}
                                 onClick={() => setTravelMethod(m)}
-                                className={`flex-1 flex items-center justify-center py-2 rounded-lg transition-all ${travelMethod === m ? 'bg-primary text-white shadow-lg' : 'hover:bg-white/5 text-text-muted'
+                                className={`flex-1 flex items-center justify-center py-2 rounded-lg transition-all border ${travelMethod === m
+                                    ? 'bg-primary text-white shadow-lg border-primary ring-2 ring-primary/40 scale-[1.02]'
+                                    : 'hover:bg-white/5 text-text-muted border-transparent'
                                     }`}
                             >
                                 {m === 'walk' && <Footprints size={16} />}
@@ -88,6 +119,36 @@ const TripFormWindow = ({
                                 <span className="ml-2 text-xs font-bold capitalize">{m}</span>
                             </button>
                         ))}
+                    </div>
+                </div>
+
+                <div className="space-y-1">
+                    <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Routing Endpoints</div>
+                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Start</div>
+                    <div>
+                        <select
+                            className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm"
+                            value={selectedStartId}
+                            onChange={(e) => onSetStart(e.target.value)}
+                        >
+                            <option value="">Auto start (first trip location)</option>
+                            {selectorOptions.map(option => (
+                                <option key={option.id} value={option.id}>{option.name} ({option.source})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Destination</div>
+                    <div>
+                        <select
+                            className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm"
+                            value={selectedDestinationId}
+                            onChange={(e) => onSetDestination(e.target.value)}
+                        >
+                            <option value="">Auto destination (last trip location)</option>
+                            {selectorOptions.map(option => (
+                                <option key={option.id} value={option.id}>{option.name} ({option.source})</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
 
@@ -126,12 +187,12 @@ const TripFormWindow = ({
                         {locations.map((loc) => (
                             <div key={loc.id} className="glass-card flex items-center justify-between gap-3 p-3">
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold truncate">{loc.name.split(',')[0]}</p>
-                                    <p className="text-[10px] text-text-muted truncate">{loc.name.split(',').slice(1, 3).join(',')}</p>
+                                    <p className="text-xs font-bold truncate" title={loc.name}>{loc.name}</p>
+                                    {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
                                 </div>
                                 <button
-                                    onClick={() => setLocations(locations.filter(l => l.id !== loc.id))}
-                                    className="text-accent/60 hover:text-accent p-1.5 rounded-md hover:bg-accent/10 transition-all"
+                                    onClick={() => onRemoveLocation(loc.id)}
+                                    className="shrink-0 text-accent/60 hover:text-accent p-1.5 rounded-md hover:bg-accent/10 transition-all"
                                 >
                                     <Trash2 size={14} />
                                 </button>
@@ -156,12 +217,79 @@ const TripFormWindow = ({
 
                 <button
                     onClick={() => onEstimateRoute(locations, travelMethod)}
-                    disabled={locations.length < 2 || isRouting}
+                    disabled={(locations.length < 2 && (!selectedStartId || !selectedDestinationId)) || isRouting}
                     className="w-full bg-white/5 hover:bg-white/10 py-3.5 rounded-xl font-bold text-sm transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-border-glass"
                 >
                     <MapPin size={16} />
                     {isRouting ? 'Estimating Route...' : 'Estimate Route Time'}
                 </button>
+
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">Saved Custom Nodes ({customNodes.length})</label>
+                        <button
+                            onClick={() => setShowSavedNodes(prev => !prev)}
+                            className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-border-glass"
+                        >
+                            {showSavedNodes ? 'Hide' : 'Show'}
+                        </button>
+                    </div>
+
+                    {showSavedNodes && (
+                        <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                        {customNodes.map((node) => (
+                            <div key={node.id} className="glass-card p-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-xs font-bold truncate flex-1">{node.name}</p>
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => {
+                                                const editedName = window.prompt('Rename custom location', node.name);
+                                                if (!editedName) return;
+                                                onEditCustomNode(node.id, { name: editedName.trim() });
+                                            }}
+                                            className="text-[10px] px-2 py-1 rounded-md hover:bg-white/10"
+                                        >
+                                            Edit
+                                        </button>
+                                        <button
+                                            onClick={() => onDeleteCustomNode(node.id)}
+                                            className="text-[10px] px-2 py-1 rounded-md hover:bg-accent/20 text-accent"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="mt-2 flex gap-1.5">
+                                    <button
+                                        onClick={() => onSetStart(node.id)}
+                                        className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10"
+                                    >
+                                        Set Start
+                                    </button>
+                                    <button
+                                        onClick={() => onSetDestination(node.id)}
+                                        className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10"
+                                    >
+                                        Set Destination
+                                    </button>
+                                    <button
+                                        onClick={() => onAddLocation(node)}
+                                        className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10"
+                                    >
+                                        Add To Trip
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {customNodes.length === 0 && (
+                            <div className="text-center py-4 border border-dashed border-border-glass rounded-xl text-text-muted text-xs">
+                                Right-click on map to create custom nodes
+                            </div>
+                        )}
+                        </div>
+                    )}
+                </div>
 
                 {routeEstimate && (
                     <div className="glass-card space-y-1">
@@ -173,6 +301,9 @@ const TripFormWindow = ({
                                 <p className="text-[11px] text-text-muted">
                                     {routeEstimate.durationMinutes} min • {routeEstimate.distanceKm} km • {travelMethod}
                                 </p>
+                                {routeEstimate.stopCount > 1 && (
+                                    <p className="text-[11px] text-text-muted">Stops in route: {routeEstimate.stopCount}</p>
+                                )}
                             </>
                         )}
                     </div>

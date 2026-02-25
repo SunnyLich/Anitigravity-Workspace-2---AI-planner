@@ -38,6 +38,29 @@ When mock mode is active, route estimates are deterministic simulated outputs so
 3. The app computes route distance/time and draws route geometry on the map.
 4. Provider in the UI shows `mock` or `mapbox`.
 
+## Current UX features
+
+- Right-click map to:
+	- set Start point,
+	- set Destination,
+	- create custom location at clicked coordinates.
+- Search is local-first:
+	- local POIs and saved custom nodes are ranked first,
+	- then London-bounded Nominatim fallback is used.
+- Start/Destination can be selected explicitly from dropdown selectors.
+- Saved custom nodes can be renamed, deleted, or added into the trip list.
+
+## Session persistence
+
+The app persists the following in browser `localStorage`:
+
+- custom nodes,
+- trip location list,
+- selected travel method,
+- selected start/destination IDs.
+
+This means reloading localhost should keep your working session by default.
+
 ## Notes
 
 - Existing itinerary optimization (`TSPSolver`) is still available and separate from point-to-point route estimation.

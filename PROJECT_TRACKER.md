@@ -19,22 +19,38 @@ Use this as the single handoff document for entry-level engineers.
 ### What works now
 1. App opens with a full-screen Leaflet map of London, Ontario.
 2. It loads `public/london-pois.json` and renders POI dots on the map.
-3. User can search places from the Plan Trip panel (search currently uses Nominatim, global search).
+3. User can search places from the Plan Trip panel with local-first behavior (local POIs + custom nodes first, then London-bounded Nominatim fallback).
 4. User can add search results into a `Locations` list.
 5. User can click:
    - **Optimize Schedule** (local heuristic TSP solver), and
    - **Estimate Route Time** (Mapbox Directions API or mock fallback).
 6. App draws either itinerary polyline or route geometry on map.
 7. Itinerary panel can export to JPG/PDF.
+8. User can right-click on map to:
+   - set Location
+   - create a custom location at clicked coordinates.
+9. Custom nodes are saved in `localStorage` and reloaded on refresh.
+10. User can explicitly choose Start/Destination from selectors, and route estimation uses these selected endpoints.
+11. Saved custom nodes can be shown, renamed, deleted, and added into the trip list.
+12. Session state persists across refresh (trip locations, travel method, selected start/destination, and custom nodes).
+13. Route estimation now includes all trip locations (not only start/destination); multi-stop optimization is attempted via Mapbox Optimization API with fallback strategies.
 
 ### What does NOT work yet (known gaps)
-- No right-click map menu.
-- No way to set Start/Destination directly from map click.
-- No “create custom location/node” flow.
-- No persistence for custom locations.
-- Search is not local-first (does not prioritize your 3031 London POIs).
-- No saved-node CRUD UI.
+#### Simple
+- Selected travel method should be highlighted
+- right click on a POI and clicking set location(replacing set start/destination) should uses the location and name of the POI, right now its using name "map pin 'coordinate'". And the trash bin icon should not by default sit on the next line of the name, but on the same line
+- Allow the user to hide the saved custom nodes.
+- Use 5 different lines for "routing endpoints", "start", the 2 drop down menu and "destination" 
 
+#### More Complex (for each of them details are to be asked and decided)
+- Show more meaningful information (to average users) on POI if they exist. 
+- Route quality still depends on provider mode (`mock` vs real `mapbox`), so mock mode is not road-accurate. Replace with OSRM for now.
+- Search ranking is still basic substring matching (no fuzzy scoring/index weighting yet).
+- Custom node editor currently supports rename only (note/category editing not yet surfaced).
+- No dedicated settings/help panels yet.
+
+#### Endgame
+- Use mapbox for routing
 ---
 
 ## 3) Architecture overview (entry-level)
@@ -64,12 +80,12 @@ Use this as the single handoff document for entry-level engineers.
 `App` fetches `london-pois.json` on load → passes `pois` to `MapDisplay` → `MapDisplay` renders `CircleMarker` dots.
 
 ### B) Search and location list
-`TripFormWindow` input change → calls `searchLocations(query)` in `nominatim.js` → shows dropdown results → selected item added to in-panel `locations` state.
+`TripFormWindow` input change → local ranked index search runs first (`pois + customNodes`) → if needed, London-bounded Nominatim fallback is queried → merged results shown → selected item added to trip `locations` state.
 
 ### C) Route estimate
 `TripFormWindow` click “Estimate Route Time” → `App.handleEstimateRoute(locations, method)` → `mapboxRouting.getRouteEstimate(...)`:
 - uses mock route when `VITE_USE_MOCK_ROUTING !== 'false'`,
-- otherwise calls Mapbox Directions.
+- otherwise calls Mapbox Optimization API for multi-stop route ordering when possible, with Directions API fallback.
 Result geometry is drawn in `MapDisplay`.
 
 ### D) Itinerary optimization
@@ -104,19 +120,19 @@ Legend:
 - `TODO` = not implemented
 
 1. Define location data model — **PARTIAL**
-   - There is an implicit object shape (`id, name, lat, lng, openingHours, duration`) but no centralized type/schema.
-2. Add map context menu actions — **TODO**
-3. Support click-to-create custom nodes — **TODO**
-4. Persist custom nodes locally — **TODO**
-5. Build local POI search index — **TODO**
-6. Prioritize London-only search results — **TODO**
-7. Add start/destination selectors — **PARTIAL**
-   - Start/destination are inferred from first/last selected locations, not explicitly user-selected.
-8. Route from selected endpoints — **PARTIAL**
-   - Routing works for first/last list items, but not from map context menu/custom node selection.
-9. Show/edit/delete saved nodes — **TODO**
+   - ✅ `src/utils/locationModel.js` now centralizes location normalization, custom-node creation, and deduping.
+2. Add map context menu actions — **DONE**
+3. Support click-to-create custom nodes — **DONE**
+4. Persist custom nodes locally — **DONE**
+5. Build local POI search index — **DONE**
+   - ✅ `src/utils/localSearch.js` now builds a local index and scores/ranks local matches.
+6. Prioritize London-only search results — **DONE**
+   - ✅ External fallback is London-bounded and London-hinted results are prioritized in ranking.
+7. Add start/destination selectors — **DONE**
+8. Route from selected endpoints — **DONE**
+9. Show/edit/delete saved nodes — **DONE**
 10. Document UX and settings — **PARTIAL**
-   - Basic README exists, but this tracker is the first complete functional documentation.
+   - Tracker is updated, but in-app settings/help UX is still not implemented.
 
 ---
 
@@ -160,3 +176,10 @@ Legend:
   - Mapbox routing service integrated with mock/real modes.
   - POI overlay restored (3031 dots from `london-pois.json`).
   - This tracker created for plan + progress + onboarding.
+   - Added right-click map context menu for Start, Destination, and custom-node creation.
+   - Added explicit Start/Destination selectors in Plan Trip panel.
+   - Added `localStorage` persistence for custom nodes.
+   - Added local-first search with London-bounded external fallback.
+   - Added saved custom node list with rename/delete/use actions.
+   - Added persisted trip session state (trip list, travel method, selected endpoints).
+   - Added dedicated local search index utility with relevance scoring.

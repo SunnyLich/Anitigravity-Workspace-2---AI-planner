@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -44,7 +44,38 @@ const CATEGORY_COLORS = {
     natural: '#22c55e',
 };
 
-const MapDisplay = ({ itinerary, routeGeometry = [], origin, destination, pois = [] }) => {
+const MapInteractionLayer = ({ onMapContextMenu, onMapClick }) => {
+    useMapEvents({
+        contextmenu(event) {
+            if (event?.originalEvent?.__poiContextHandled) return;
+            event.originalEvent.preventDefault();
+            if (!onMapContextMenu) return;
+
+            onMapContextMenu({
+                lat: event.latlng.lat,
+                lng: event.latlng.lng,
+                x: event.containerPoint.x,
+                y: event.containerPoint.y,
+            });
+        },
+        click() {
+            if (onMapClick) onMapClick();
+        },
+    });
+
+    return null;
+};
+
+const MapDisplay = ({
+    itinerary,
+    routeGeometry = [],
+    origin,
+    destination,
+    pois = [],
+    customNodes = [],
+    onMapContextMenu,
+    onMapClick,
+}) => {
     const points = itinerary.map(item => ({ lat: item.lat, lng: item.lng }));
     const polylinePositions = points.map(p => [p.lat, p.lng]);
     const hasRouteGeometry = Array.isArray(routeGeometry) && routeGeometry.length > 1;
@@ -62,6 +93,8 @@ const MapDisplay = ({ itinerary, routeGeometry = [], origin, destination, pois =
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
+            <MapInteractionLayer onMapContextMenu={onMapContextMenu} onMapClick={onMapClick} />
+
             {pois.map((poi) => {
                 const color = CATEGORY_COLORS[poi.category] || '#6366f1';
                 const title = poi.name || 'Unnamed Place';
@@ -78,6 +111,24 @@ const MapDisplay = ({ itinerary, routeGeometry = [], origin, destination, pois =
                             weight: 1,
                             opacity: 1,
                         }}
+                        eventHandlers={{
+                            contextmenu: (event) => {
+                                if (!onMapContextMenu) return;
+                                event.originalEvent.__poiContextHandled = true;
+                                event.originalEvent.preventDefault();
+                                event.originalEvent.stopPropagation();
+
+                                onMapContextMenu({
+                                    lat: poi.lat,
+                                    lng: poi.lon,
+                                    x: event.containerPoint.x,
+                                    y: event.containerPoint.y,
+                                    sourceType: 'poi',
+                                    sourceId: poi.id,
+                                    sourceName: poi.name || 'POI',
+                                });
+                            },
+                        }}
                     >
                         <Tooltip direction="top" offset={[0, -8]} opacity={1}>
                             <strong>{title}</strong>
@@ -85,6 +136,30 @@ const MapDisplay = ({ itinerary, routeGeometry = [], origin, destination, pois =
                     </CircleMarker>
                 );
             })}
+
+            {customNodes.map((node) => (
+                <CircleMarker
+                    key={node.id}
+                    center={[node.lat, node.lng]}
+                    radius={7}
+                    pathOptions={{
+                        color: '#f97316',
+                        fillColor: '#f97316',
+                        fillOpacity: 0.85,
+                        weight: 2,
+                        opacity: 1,
+                    }}
+                >
+                    <Tooltip direction="top" offset={[0, -8]} opacity={1}>
+                        <strong>{node.name}</strong>
+                    </Tooltip>
+                    <Popup>
+                        <div className="text-bg-deep font-bold">{node.name}</div>
+                        <div className="text-bg-deep text-xs">Custom location</div>
+                        {node.note && <div className="text-bg-deep text-xs mt-1">{node.note}</div>}
+                    </Popup>
+                </CircleMarker>
+            ))}
 
             {/* Itinerary markers */}
             {itinerary.map((item, idx) => (

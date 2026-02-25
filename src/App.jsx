@@ -5,15 +5,36 @@ import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
 import { getRouteEstimate } from './services/mapboxRouting';
+import { createCustomLocation, normalizeLocation } from './utils/locationModel';
+
+const CUSTOM_NODES_STORAGE_KEY = 'tripoptimizer.customNodes';
+const TRIP_LOCATIONS_STORAGE_KEY = 'tripoptimizer.tripLocations';
+const SELECTED_ENDPOINTS_STORAGE_KEY = 'tripoptimizer.selectedEndpoints';
+const TRAVEL_METHOD_STORAGE_KEY = 'tripoptimizer.travelMethod';
 
 function App() {
+  const [locations, setLocations] = useState([]);
   const [itinerary, setItinerary] = useState([]);
   const [travelMethod, setTravelMethod] = useState('walk');
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
   const [routeEstimate, setRouteEstimate] = useState(null);
-  const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null });
+  const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
+  const [selectedStartId, setSelectedStartId] = useState('');
+  const [selectedDestinationId, setSelectedDestinationId] = useState('');
+  const [customNodes, setCustomNodes] = useState([]);
   const [pois, setPois] = useState([]);
+  const [mapContextMenu, setMapContextMenu] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+    lat: null,
+    lng: null,
+    sourceType: 'map',
+    sourceId: null,
+    sourceName: '',
+  });
+  const [customNodeDraft, setCustomNodeDraft] = useState({ open: false, lat: null, lng: null, name: '', note: '' });
 
   // Window Visibility State
   const [windows, setWindows] = useState({
@@ -30,8 +51,142 @@ function App() {
       .catch(err => console.warn('Could not load POIs:', err));
   }, []);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CUSTOM_NODES_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map(item => normalizeLocation(item, 'custom')).filter(Boolean)
+        : [];
+
+      setCustomNodes(normalized);
+    } catch (error) {
+      console.warn('Could not load custom nodes from storage:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CUSTOM_NODES_STORAGE_KEY, JSON.stringify(customNodes));
+    } catch (error) {
+      console.warn('Could not save custom nodes:', error);
+    }
+  }, [customNodes]);
+
+  useEffect(() => {
+    try {
+      const rawLocations = localStorage.getItem(TRIP_LOCATIONS_STORAGE_KEY);
+      const rawTravelMethod = localStorage.getItem(TRAVEL_METHOD_STORAGE_KEY);
+      const rawEndpoints = localStorage.getItem(SELECTED_ENDPOINTS_STORAGE_KEY);
+
+      if (rawLocations) {
+        const parsedLocations = JSON.parse(rawLocations);
+        const normalizedLocations = Array.isArray(parsedLocations)
+          ? parsedLocations.map(item => normalizeLocation(item, item.source || 'search')).filter(Boolean)
+          : [];
+        setLocations(normalizedLocations);
+      }
+
+      if (rawTravelMethod && ['walk', 'car', 'transit'].includes(rawTravelMethod)) {
+        setTravelMethod(rawTravelMethod);
+      }
+
+      if (rawEndpoints) {
+        const parsedEndpoints = JSON.parse(rawEndpoints);
+        setSelectedStartId(parsedEndpoints.selectedStartId || '');
+        setSelectedDestinationId(parsedEndpoints.selectedDestinationId || '');
+      }
+    } catch (error) {
+      console.warn('Could not restore trip session:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TRIP_LOCATIONS_STORAGE_KEY, JSON.stringify(locations));
+    } catch (error) {
+      console.warn('Could not save trip locations:', error);
+    }
+  }, [locations]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TRAVEL_METHOD_STORAGE_KEY, travelMethod);
+    } catch (error) {
+      console.warn('Could not save travel method:', error);
+    }
+  }, [travelMethod]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        SELECTED_ENDPOINTS_STORAGE_KEY,
+        JSON.stringify({ selectedStartId, selectedDestinationId })
+      );
+    } catch (error) {
+      console.warn('Could not save selected endpoints:', error);
+    }
+  }, [selectedStartId, selectedDestinationId]);
+
+  const availableLocations = [...locations, ...customNodes];
+
+  useEffect(() => {
+    const hasStart = selectedStartId ? availableLocations.some(item => item.id === selectedStartId) : true;
+    const hasDestination = selectedDestinationId ? availableLocations.some(item => item.id === selectedDestinationId) : true;
+
+    if (!hasStart) setSelectedStartId('');
+    if (!hasDestination) setSelectedDestinationId('');
+  }, [availableLocations, selectedStartId, selectedDestinationId]);
+
+  const resolveLocation = (locationId) => availableLocations.find(item => item.id === locationId) || null;
+
+  const inferredStart = locations[0] || customNodes[0] || null;
+  const inferredDestination =
+    locations.length > 1
+      ? locations[locations.length - 1]
+      : customNodes.find(item => item.id !== (locations[0]?.id || selectedStartId)) || null;
+
+  const selectedStartLocation = resolveLocation(selectedStartId) || inferredStart;
+  const selectedDestinationLocation = resolveLocation(selectedDestinationId) || inferredDestination;
+
   const toggleWindow = (key) => {
     setWindows(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const addLocationToTrip = (rawLocation) => {
+    const normalized = normalizeLocation(rawLocation, rawLocation.source || 'search');
+    if (!normalized) return;
+
+    setLocations(prev => {
+      const exists = prev.some(item => item.id === normalized.id);
+      if (exists) return prev;
+      return [...prev, normalized];
+    });
+  };
+
+  const removeLocationFromTrip = (locationId) => {
+    setLocations(prev => prev.filter(item => item.id !== locationId));
+  };
+
+  const updateCustomNode = (locationId, updates) => {
+    setCustomNodes(prev =>
+      prev.map(item => {
+        if (item.id !== locationId) return item;
+        return {
+          ...item,
+          name: updates.name ?? item.name,
+          note: updates.note ?? item.note,
+        };
+      })
+    );
+  };
+
+  const deleteCustomNode = (locationId) => {
+    setCustomNodes(prev => prev.filter(item => item.id !== locationId));
+    setSelectedStartId(prev => (prev === locationId ? '' : prev));
+    setSelectedDestinationId(prev => (prev === locationId ? '' : prev));
   };
 
   const handleOptimize = (locations, method) => {
@@ -53,19 +208,26 @@ function App() {
   };
 
   const handleEstimateRoute = async (locations, method) => {
-    if (!locations || locations.length < 2) return;
+    const origin = selectedStartLocation || locations[0] || null;
+    const destination = selectedDestinationLocation || locations[locations.length - 1] || null;
 
-    const origin = locations[0];
-    const destination = locations[locations.length - 1];
+    if (!origin || !destination || origin.id === destination.id) {
+      setRouteEstimate({
+        provider: 'error',
+        message: 'Select two different endpoints (start and destination).',
+      });
+      return;
+    }
 
     setTravelMethod(method);
     setIsRouting(true);
-    setRouteEndpoints({ origin, destination });
+    setRouteEndpoints({ origin, destination, source: 'explicit-selection' });
 
     try {
       const estimate = await getRouteEstimate({
         origin,
         destination,
+        locations,
         travelMethod: method,
       });
       setRouteEstimate(estimate);
@@ -87,11 +249,134 @@ function App() {
         <MapDisplay
           itinerary={itinerary}
           routeGeometry={routeEstimate?.geometry || []}
-          origin={routeEndpoints.origin}
-          destination={routeEndpoints.destination}
+          origin={selectedStartLocation || routeEndpoints.origin}
+          destination={selectedDestinationLocation || routeEndpoints.destination}
+          customNodes={customNodes}
           pois={pois}
+          onMapContextMenu={(payload) => {
+            setMapContextMenu({
+              visible: true,
+              x: payload.x,
+              y: payload.y,
+              lat: payload.lat,
+              lng: payload.lng,
+              sourceType: payload.sourceType || 'map',
+              sourceId: payload.sourceId || null,
+              sourceName: payload.sourceName || '',
+            });
+          }}
+          onMapClick={() => setMapContextMenu(prev => ({ ...prev, visible: false }))}
         />
       </div>
+
+      {mapContextMenu.visible && (
+        <div
+          className="glass-panel p-2 text-xs font-bold"
+          style={{
+            zIndex: 1200,
+            position: 'absolute',
+            left: mapContextMenu.x,
+            top: mapContextMenu.y,
+            minWidth: 220,
+          }}
+        >
+          <button
+            className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg"
+            onClick={() => {
+              const location = mapContextMenu.sourceType === 'poi'
+                ? normalizeLocation({
+                    id: mapContextMenu.sourceId,
+                    name: mapContextMenu.sourceName,
+                    lat: mapContextMenu.lat,
+                    lng: mapContextMenu.lng,
+                  }, 'poi')
+                : createCustomLocation({
+                    name: mapContextMenu.sourceName || `Map Pin (${mapContextMenu.lat.toFixed(4)}, ${mapContextMenu.lng.toFixed(4)})`,
+                    lat: mapContextMenu.lat,
+                    lng: mapContextMenu.lng,
+                  });
+
+              if (!location) return;
+
+              if (mapContextMenu.sourceType !== 'poi') {
+                setCustomNodes(prev => {
+                  const exists = prev.some(item => item.id === location.id);
+                  return exists ? prev : [...prev, location];
+                });
+              }
+
+              addLocationToTrip(location);
+              if (!selectedStartId) setSelectedStartId(location.id);
+              else if (!selectedDestinationId) setSelectedDestinationId(location.id);
+
+              setMapContextMenu(prev => ({ ...prev, visible: false }));
+            }}
+          >
+            Set Location
+          </button>
+          <button
+            className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg"
+            onClick={() => {
+              setCustomNodeDraft({
+                open: true,
+                lat: mapContextMenu.lat,
+                lng: mapContextMenu.lng,
+                name: '',
+                note: '',
+              });
+              setMapContextMenu(prev => ({ ...prev, visible: false }));
+            }}
+          >
+            Create Custom Location Here
+          </button>
+        </div>
+      )}
+
+      {customNodeDraft.open && (
+        <div
+          className="glass-panel p-4 space-y-3"
+          style={{ position: 'absolute', bottom: 90, left: 20, zIndex: 1200, width: 320 }}
+        >
+          <p className="text-xs font-black uppercase tracking-wider text-text-muted">Create Custom Location</p>
+          <p className="text-[11px] text-text-muted">{customNodeDraft.lat?.toFixed(6)}, {customNodeDraft.lng?.toFixed(6)}</p>
+          <input
+            value={customNodeDraft.name}
+            onChange={(e) => setCustomNodeDraft(prev => ({ ...prev, name: e.target.value }))}
+            className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm outline-none"
+            placeholder="Location name"
+          />
+          <input
+            value={customNodeDraft.note}
+            onChange={(e) => setCustomNodeDraft(prev => ({ ...prev, note: e.target.value }))}
+            className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm outline-none"
+            placeholder="Optional note"
+          />
+          <div className="flex gap-2">
+            <button
+              className="flex-1 bg-primary hover:bg-primary-hover py-2.5 rounded-xl text-xs font-bold"
+              onClick={() => {
+                const created = createCustomLocation({
+                  name: customNodeDraft.name,
+                  lat: customNodeDraft.lat,
+                  lng: customNodeDraft.lng,
+                  note: customNodeDraft.note,
+                });
+                setCustomNodes(prev => [...prev, created]);
+                addLocationToTrip(created);
+                setCustomNodeDraft({ open: false, lat: null, lng: null, name: '', note: '' });
+              }}
+            >
+              Save Location
+            </button>
+            <button
+              className="flex-1 bg-white/5 hover:bg-white/10 py-2.5 rounded-xl text-xs font-bold border border-border-glass"
+              onClick={() => setCustomNodeDraft({ open: false, lat: null, lng: null, name: '', note: '' })}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* All UI sits above the map via explicit z-index */}
 
@@ -118,10 +403,23 @@ function App() {
             isOpen={windows.search}
             onClose={() => toggleWindow('search')}
             onMinimize={() => toggleWindow('search')}
+            locations={locations}
+            travelMethod={travelMethod}
+            setTravelMethod={setTravelMethod}
+            onAddLocation={addLocationToTrip}
+            onRemoveLocation={removeLocationFromTrip}
             onOptimize={handleOptimize}
             onEstimateRoute={handleEstimateRoute}
             routeEstimate={routeEstimate}
             isRouting={isRouting}
+            pois={pois}
+            customNodes={customNodes}
+            selectedStartId={selectedStartId}
+            selectedDestinationId={selectedDestinationId}
+            onSetStart={setSelectedStartId}
+            onSetDestination={setSelectedDestinationId}
+            onEditCustomNode={updateCustomNode}
+            onDeleteCustomNode={deleteCustomNode}
           />
 
           <ItineraryWindow
