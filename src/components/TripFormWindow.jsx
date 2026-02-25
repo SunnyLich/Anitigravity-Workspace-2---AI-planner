@@ -26,7 +26,15 @@ const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style
     );
 };
 
-const TripFormWindow = ({ isOpen, onClose, onOptimize, onMinimize }) => {
+const TripFormWindow = ({
+    isOpen,
+    onClose,
+    onOptimize,
+    onMinimize,
+    onEstimateRoute,
+    routeEstimate,
+    isRouting,
+}) => {
     const [locations, setLocations] = useState([]);
     const [travelMethod, setTravelMethod] = useState('walk');
     const [searchQuery, setSearchQuery] = useState('');
@@ -145,6 +153,30 @@ const TripFormWindow = ({ isOpen, onClose, onOptimize, onMinimize }) => {
                     <Calendar size={16} />
                     Optimize Schedule
                 </button>
+
+                <button
+                    onClick={() => onEstimateRoute(locations, travelMethod)}
+                    disabled={locations.length < 2 || isRouting}
+                    className="w-full bg-white/5 hover:bg-white/10 py-3.5 rounded-xl font-bold text-sm transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-border-glass"
+                >
+                    <MapPin size={16} />
+                    {isRouting ? 'Estimating Route...' : 'Estimate Route Time'}
+                </button>
+
+                {routeEstimate && (
+                    <div className="glass-card space-y-1">
+                        {routeEstimate.provider === 'error' ? (
+                            <p className="text-xs font-bold text-accent">{routeEstimate.message}</p>
+                        ) : (
+                            <>
+                                <p className="text-xs font-bold">Route estimate ({routeEstimate.provider})</p>
+                                <p className="text-[11px] text-text-muted">
+                                    {routeEstimate.durationMinutes} min • {routeEstimate.distanceKm} km • {travelMethod}
+                                </p>
+                            </>
+                        )}
+                    </div>
+                )}
             </div>
         </WindowWrapper>
     );

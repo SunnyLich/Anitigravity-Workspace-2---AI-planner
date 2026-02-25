@@ -1,16 +1,45 @@
-# React + Vite
+# TripOptimizer (Mapbox-ready)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This app plans trips and now includes a routing layer that supports:
 
-Currently, two official plugins are available:
+- Mock routing (default, no API key required)
+- Real Mapbox Directions API routing
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Running locally
 
-## React Compiler
+```bash
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Environment configuration
 
-## Expanding the ESLint configuration
+Create a `.env` file in the project root.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Default (mock routing)
+
+```bash
+VITE_USE_MOCK_ROUTING=true
+```
+
+### Real Mapbox routing
+
+```bash
+VITE_USE_MOCK_ROUTING=false
+VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
+```
+
+When mock mode is active, route estimates are deterministic simulated outputs so UI and workflows can be built before token access.
+
+## Current routing flow
+
+1. Add at least two locations in the Plan Trip window.
+2. Click **Estimate Route Time**.
+3. The app computes route distance/time and draws route geometry on the map.
+4. Provider in the UI shows `mock` or `mapbox`.
+
+## Notes
+
+- Existing itinerary optimization (`TSPSolver`) is still available and separate from point-to-point route estimation.
+- The map currently renders local POI overlay data from `public/london-pois.json`.
+- See `PROJECT_TRACKER.md` for current architecture, missing features, and implementation plan status.

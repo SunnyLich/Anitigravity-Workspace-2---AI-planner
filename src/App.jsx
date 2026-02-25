@@ -4,11 +4,15 @@ import { TripFormWindow } from './components/TripFormWindow';
 import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
+import { getRouteEstimate } from './services/mapboxRouting';
 
 function App() {
   const [itinerary, setItinerary] = useState([]);
   const [travelMethod, setTravelMethod] = useState('walk');
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
+  const [routeEstimate, setRouteEstimate] = useState(null);
+  const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null });
   const [pois, setPois] = useState([]);
 
   // Window Visibility State
@@ -19,11 +23,10 @@ function App() {
     info: false
   });
 
-  // Load London Ontario POIs
   useEffect(() => {
     fetch('/london-pois.json')
       .then(r => r.json())
-      .then(data => setPois(data))
+      .then(data => setPois(Array.isArray(data) ? data : []))
       .catch(err => console.warn('Could not load POIs:', err));
   }, []);
 
@@ -49,11 +52,45 @@ function App() {
     }, 1200);
   };
 
+  const handleEstimateRoute = async (locations, method) => {
+    if (!locations || locations.length < 2) return;
+
+    const origin = locations[0];
+    const destination = locations[locations.length - 1];
+
+    setTravelMethod(method);
+    setIsRouting(true);
+    setRouteEndpoints({ origin, destination });
+
+    try {
+      const estimate = await getRouteEstimate({
+        origin,
+        destination,
+        travelMethod: method,
+      });
+      setRouteEstimate(estimate);
+    } catch (error) {
+      console.error('Could not estimate route:', error);
+      setRouteEstimate({
+        provider: 'error',
+        message: error.message || 'Could not compute route estimate.',
+      });
+    } finally {
+      setIsRouting(false);
+    }
+  };
+
   return (
     <div className="h-screen w-screen bg-bg-deep overflow-hidden relative">
       {/* Background Layer: Map — full screen, behind everything */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-        <MapDisplay itinerary={itinerary} pois={pois} />
+        <MapDisplay
+          itinerary={itinerary}
+          routeGeometry={routeEstimate?.geometry || []}
+          origin={routeEndpoints.origin}
+          destination={routeEndpoints.destination}
+          pois={pois}
+        />
       </div>
 
       {/* All UI sits above the map via explicit z-index */}
@@ -82,6 +119,9 @@ function App() {
             onClose={() => toggleWindow('search')}
             onMinimize={() => toggleWindow('search')}
             onOptimize={handleOptimize}
+            onEstimateRoute={handleEstimateRoute}
+            routeEstimate={routeEstimate}
+            isRouting={isRouting}
           />
 
           <ItineraryWindow
@@ -125,14 +165,18 @@ function App() {
       </div>
 
       {/* Loading Overlay */}
-      {isOptimizing && (
+      {(isOptimizing || isRouting) && (
         <div className="fixed inset-0 bg-bg-deep/40 backdrop-blur-md flex flex-col items-center justify-center" style={{ zIndex: 1000 }}>
           <div className="relative">
             <div className="w-20 h-20 border-4 border-primary/20 rounded-full"></div>
             <div className="absolute inset-0 w-20 h-20 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           </div>
-          <p className="mt-6 font-black text-xl tracking-widest uppercase animate-pulse">Computing Best Route</p>
-          <p className="text-text-muted text-sm mt-2">Running TSP-TW heuristic algorithms...</p>
+          <p className="mt-6 font-black text-xl tracking-widest uppercase animate-pulse">
+            {isOptimizing ? 'Computing Itinerary' : 'Computing Route'}
+          </p>
+          <p className="text-text-muted text-sm mt-2">
+            {isOptimizing ? 'Running TSP-TW heuristic algorithms...' : 'Calling routing service (mock or Mapbox)...'}
+          </p>
         </div>
       )}
 
@@ -140,7 +184,9 @@ function App() {
       <div className="absolute bottom-10 right-10" style={{ zIndex: 500 }}>
         <div className="glass-panel px-4 py-2 flex items-center gap-3 text-xs font-bold text-text-muted">
           <MapIcon size={14} className="text-primary" />
-          <span>{pois.length > 0 ? `${pois.length} London ON places loaded` : 'Loading map data...'}</span>
+          <span>
+            {`${pois.length} POIs • ${import.meta.env.VITE_USE_MOCK_ROUTING !== 'false' ? 'Mock' : 'Mapbox'} routing`}
+          </span>
         </div>
       </div>
     </div>

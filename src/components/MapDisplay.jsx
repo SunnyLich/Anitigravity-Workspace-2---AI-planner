@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -28,123 +28,27 @@ const RecenterMap = ({ points }) => {
     return null;
 };
 
-// Category color palette
-const CATEGORY_COLORS = {
-    amenity: '#6366f1',  // indigo
-    shop: '#10b981',  // emerald
-    tourism: '#f59e0b',  // amber
-    leisure: '#3b82f6',  // blue
-    historic: '#ef4444',  // red
-    healthcare: '#14b8a6',  // teal
-    office: '#8b5cf6',  // violet
-    sport: '#f97316',  // orange
-    building: '#94a3b8',  // slate
-    natural: '#22c55e',  // green
-};
-
-// Category icons (emoji for tooltip)
-const CATEGORY_ICONS = {
-    amenity: '🏢',
-    shop: '🛍️',
-    tourism: '📸',
-    leisure: '🏖️',
-    historic: '🏛️',
-    healthcare: '🏥',
-    office: '💼',
-    sport: '⚽',
-    building: '🏗️',
-    natural: '🌿',
-};
-
-// Format type for display (e.g. 'fast_food' → 'Fast Food')
-const formatType = (t) => t ? t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';
-
-// POI dot component
-const PoiDot = ({ poi, zoom }) => {
-    const [hovered, setHovered] = useState(false);
-    const color = CATEGORY_COLORS[poi.category] || '#6366f1';
-    const radius = hovered ? 9 : 6;
-
-    // Hide low-priority POIs at low zoom for performance
-    if (zoom < 13 && poi.priority > 2) return null;
-    if (zoom < 12 && poi.priority > 1) return null;
-
-    return (
-        <CircleMarker
-            center={[poi.lat, poi.lon]}
-            radius={radius}
-            pathOptions={{
-                color: color,
-                fillColor: color,
-                fillOpacity: hovered ? 0.95 : 0.7,
-                weight: hovered ? 2 : 1,
-                opacity: 1,
-            }}
-            eventHandlers={{
-                mouseover: () => setHovered(true),
-                mouseout: () => setHovered(false),
-            }}
-        >
-            <Tooltip
-                direction="top"
-                offset={[0, -8]}
-                opacity={1}
-                className="poi-tooltip"
-            >
-                <span className="poi-tooltip-icon">{CATEGORY_ICONS[poi.category]}</span>
-                <strong>{poi.name}</strong>
-                <span className="poi-tooltip-type">{formatType(poi.type)}</span>
-            </Tooltip>
-            <Popup className="poi-popup">
-                <div className="poi-popup-content">
-                    <div className="poi-popup-header" style={{ borderLeftColor: color }}>
-                        <span className="poi-popup-icon">{CATEGORY_ICONS[poi.category]}</span>
-                        <div>
-                            <strong className="poi-popup-name">{poi.name}</strong>
-                            <span className="poi-popup-type">{formatType(poi.type)}</span>
-                        </div>
-                    </div>
-                    {poi.address && (
-                        <div className="poi-popup-row">📍 {poi.address}</div>
-                    )}
-                    {poi.hours && (
-                        <div className="poi-popup-row">🕐 {poi.hours}</div>
-                    )}
-                    {poi.phone && (
-                        <div className="poi-popup-row">📞 {poi.phone}</div>
-                    )}
-                    {poi.website && (
-                        <div className="poi-popup-row">
-                            🌐 <a href={poi.website} target="_blank" rel="noreferrer">{poi.website.replace(/^https?:\/\//, '')}</a>
-                        </div>
-                    )}
-                </div>
-            </Popup>
-        </CircleMarker>
-    );
-};
-
-// Component that tracks zoom level
-const ZoomTracker = ({ onZoomChange }) => {
-    const map = useMap();
-    useEffect(() => {
-        onZoomChange(map.getZoom());
-        map.on('zoomend', () => onZoomChange(map.getZoom()));
-        return () => { map.off('zoomend'); };
-    }, [map, onZoomChange]);
-    return null;
-};
-
 // London, Ontario centre
 const LONDON_ON = [42.9849, -81.2453];
 
-const MapDisplay = ({ itinerary, pois = [] }) => {
+const CATEGORY_COLORS = {
+    amenity: '#6366f1',
+    shop: '#10b981',
+    tourism: '#f59e0b',
+    leisure: '#3b82f6',
+    historic: '#ef4444',
+    healthcare: '#14b8a6',
+    office: '#8b5cf6',
+    sport: '#f97316',
+    building: '#94a3b8',
+    natural: '#22c55e',
+};
+
+const MapDisplay = ({ itinerary, routeGeometry = [], origin, destination, pois = [] }) => {
     const points = itinerary.map(item => ({ lat: item.lat, lng: item.lng }));
     const polylinePositions = points.map(p => [p.lat, p.lng]);
+    const hasRouteGeometry = Array.isArray(routeGeometry) && routeGeometry.length > 1;
     const center = points.length > 0 ? [points[0].lat, points[0].lng] : LONDON_ON;
-
-    const [zoom, setZoom] = useState(13);
-    const handleZoomChange = useCallback((z) => setZoom(z), []);
 
     return (
         <MapContainer
@@ -158,12 +62,29 @@ const MapDisplay = ({ itinerary, pois = [] }) => {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            <ZoomTracker onZoomChange={handleZoomChange} />
+            {pois.map((poi) => {
+                const color = CATEGORY_COLORS[poi.category] || '#6366f1';
+                const title = poi.name || 'Unnamed Place';
 
-            {/* London Ontario POI dots */}
-            {pois.map(poi => (
-                <PoiDot key={poi.id} poi={poi} zoom={zoom} />
-            ))}
+                return (
+                    <CircleMarker
+                        key={poi.id}
+                        center={[poi.lat, poi.lon]}
+                        radius={5}
+                        pathOptions={{
+                            color,
+                            fillColor: color,
+                            fillOpacity: 0.72,
+                            weight: 1,
+                            opacity: 1,
+                        }}
+                    >
+                        <Tooltip direction="top" offset={[0, -8]} opacity={1}>
+                            <strong>{title}</strong>
+                        </Tooltip>
+                    </CircleMarker>
+                );
+            })}
 
             {/* Itinerary markers */}
             {itinerary.map((item, idx) => (
@@ -175,7 +96,7 @@ const MapDisplay = ({ itinerary, pois = [] }) => {
                 </Marker>
             ))}
 
-            {polylinePositions.length > 1 && (
+            {polylinePositions.length > 1 && !hasRouteGeometry && (
                 <Polyline
                     positions={polylinePositions}
                     color="#6366f1"
@@ -183,6 +104,33 @@ const MapDisplay = ({ itinerary, pois = [] }) => {
                     opacity={0.8}
                     dashArray="10, 10"
                 />
+            )}
+
+            {hasRouteGeometry && (
+                <Polyline
+                    positions={routeGeometry}
+                    color="#22c55e"
+                    weight={5}
+                    opacity={0.85}
+                />
+            )}
+
+            {origin && (
+                <Marker position={[origin.lat, origin.lng]}>
+                    <Popup>
+                        <div className="text-bg-deep font-bold">Start</div>
+                        <div className="text-bg-deep text-xs">{origin.name?.split(',')[0] || `${origin.lat}, ${origin.lng}`}</div>
+                    </Popup>
+                </Marker>
+            )}
+
+            {destination && (
+                <Marker position={[destination.lat, destination.lng]}>
+                    <Popup>
+                        <div className="text-bg-deep font-bold">Destination</div>
+                        <div className="text-bg-deep text-xs">{destination.name?.split(',')[0] || `${destination.lat}, ${destination.lng}`}</div>
+                    </Popup>
+                </Marker>
             )}
 
             <RecenterMap points={points} />
