@@ -41,6 +41,8 @@ const TripFormWindow = ({
     onEstimateRoute,
     routeEstimate,
     isRouting,
+    routingStatusMessage,
+    routingElapsedSeconds,
     pois,
     customNodes,
     selectedStartId,
@@ -112,6 +114,19 @@ const TripFormWindow = ({
                                     ? 'bg-primary text-white shadow-lg border-primary ring-2 ring-primary/40 scale-[1.02]'
                                     : 'hover:bg-white/5 text-text-muted border-transparent'
                                     }`}
+                                style={travelMethod === m
+                                    ? {
+                                        backgroundColor: 'var(--primary)',
+                                        color: '#ffffff',
+                                        borderColor: 'var(--primary)',
+                                        boxShadow: '0 0 0 2px rgba(99,102,241,0.45), 0 6px 16px rgba(99,102,241,0.35)',
+                                        fontWeight: 800,
+                                    }
+                                    : {
+                                        color: 'var(--text-muted)',
+                                        borderColor: 'transparent',
+                                    }
+                                }
                             >
                                 {m === 'walk' && <Footprints size={16} />}
                                 {m === 'car' && <Car size={16} />}
@@ -120,6 +135,7 @@ const TripFormWindow = ({
                             </button>
                         ))}
                     </div>
+                    <p className="text-[11px] font-bold text-primary">Selected: {travelMethod}</p>
                 </div>
 
                 <div className="space-y-1">
@@ -224,14 +240,23 @@ const TripFormWindow = ({
                     {isRouting ? 'Estimating Route...' : 'Estimate Route Time'}
                 </button>
 
+                {(isRouting || routeEstimate) && (
+                    <div className="glass-card space-y-1">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Routing Status</p>
+                        <p className="text-xs font-bold">{routingStatusMessage || 'Waiting...'}</p>
+                        <p className="text-[11px] text-text-muted">Elapsed: {routingElapsedSeconds}s</p>
+                    </div>
+                )}
+
                 <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                         <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">Saved Custom Nodes ({customNodes.length})</label>
                         <button
                             onClick={() => setShowSavedNodes(prev => !prev)}
                             className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-border-glass"
+                            title={showSavedNodes ? 'Collapse saved nodes' : 'Expand saved nodes'}
                         >
-                            {showSavedNodes ? 'Hide' : 'Show'}
+                            {showSavedNodes ? '▾' : '▸'}
                         </button>
                     </div>
 
@@ -284,7 +309,7 @@ const TripFormWindow = ({
                         ))}
                         {customNodes.length === 0 && (
                             <div className="text-center py-4 border border-dashed border-border-glass rounded-xl text-text-muted text-xs">
-                                Right-click on map to create custom nodes
+                                No saved custom nodes
                             </div>
                         )}
                         </div>

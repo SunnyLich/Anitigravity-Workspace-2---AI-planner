@@ -25,7 +25,7 @@ export class TSPSolver {
 
     getTravelTime(p1, p2) {
         const distance = this.getDistance(p1, p2);
-        return (distance / this.travelSpeed) * 60; // returns minutes
+        return Math.round((distance / this.travelSpeed) * 60); // returns whole minutes
     }
 
     timeToMinutes(timeStr) {
@@ -34,8 +34,9 @@ export class TSPSolver {
     }
 
     minutesToTime(minutes) {
-        const h = Math.floor(minutes / 60) % 24;
-        const m = minutes % 60;
+        const wholeMinutes = Math.round(minutes);
+        const h = Math.floor(wholeMinutes / 60) % 24;
+        const m = wholeMinutes % 60;
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
     }
 
@@ -72,7 +73,7 @@ export class TSPSolver {
 
                 // If we arrive before it opens, we wait
                 if (arrival < openMin) {
-                    wait = openMin - arrival;
+                    wait = Math.round(openMin - arrival);
                     arrival = openMin;
                 }
 
@@ -83,8 +84,8 @@ export class TSPSolver {
                     if (cost < minCost) {
                         minCost = cost;
                         bestNext = i;
-                        nextArrivalTime = arrival;
-                        nextWaitTime = wait;
+                        nextArrivalTime = Math.round(arrival);
+                        nextWaitTime = Math.round(wait);
                     }
                 }
             }
@@ -102,7 +103,7 @@ export class TSPSolver {
                 arrivalTime: this.minutesToTime(nextArrivalTime),
                 departureTime: this.minutesToTime(nextArrivalTime + nextNode.duration),
                 waitTime: nextWaitTime,
-                travelFromPrevious: Math.round(this.getTravelTime(currentPos, nextNode))
+                travelFromPrevious: this.getTravelTime(currentPos, nextNode)
             });
 
             currentTime = nextArrivalTime + nextNode.duration;

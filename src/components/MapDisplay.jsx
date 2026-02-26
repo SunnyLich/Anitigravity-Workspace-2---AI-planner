@@ -44,6 +44,35 @@ const CATEGORY_COLORS = {
     natural: '#22c55e',
 };
 
+function hexToRgb(hex) {
+    const normalized = hex.replace('#', '');
+    const expanded = normalized.length === 3
+        ? normalized.split('').map(char => char + char).join('')
+        : normalized;
+
+    return {
+        r: parseInt(expanded.slice(0, 2), 16),
+        g: parseInt(expanded.slice(2, 4), 16),
+        b: parseInt(expanded.slice(4, 6), 16),
+    };
+}
+
+function rgbToHex({ r, g, b }) {
+    const clamp = (value) => Math.max(0, Math.min(255, Math.round(value)));
+    return `#${clamp(r).toString(16).padStart(2, '0')}${clamp(g).toString(16).padStart(2, '0')}${clamp(b).toString(16).padStart(2, '0')}`;
+}
+
+function interpolateColor(startHex, endHex, ratio) {
+    const start = hexToRgb(startHex);
+    const end = hexToRgb(endHex);
+
+    return rgbToHex({
+        r: start.r + (end.r - start.r) * ratio,
+        g: start.g + (end.g - start.g) * ratio,
+        b: start.b + (end.b - start.b) * ratio,
+    });
+}
+
 const MapInteractionLayer = ({ onMapContextMenu, onMapClick }) => {
     useMapEvents({
         contextmenu(event) {
@@ -79,6 +108,7 @@ const MapDisplay = ({
     const points = itinerary.map(item => ({ lat: item.lat, lng: item.lng }));
     const polylinePositions = points.map(p => [p.lat, p.lng]);
     const hasRouteGeometry = Array.isArray(routeGeometry) && routeGeometry.length > 1;
+    const routeSegmentCount = hasRouteGeometry ? routeGeometry.length - 1 : 0;
     const center = points.length > 0 ? [points[0].lat, points[0].lng] : LONDON_ON;
 
     return (
@@ -182,12 +212,22 @@ const MapDisplay = ({
             )}
 
             {hasRouteGeometry && (
-                <Polyline
-                    positions={routeGeometry}
-                    color="#22c55e"
-                    weight={5}
-                    opacity={0.85}
-                />
+                routeGeometry.slice(1).map((point, index) => {
+                    const startPoint = routeGeometry[index];
+                    const endPoint = point;
+                    const ratio = routeSegmentCount <= 1 ? 1 : index / (routeSegmentCount - 1);
+                    const segmentColor = interpolateColor('#6366f1', '#10b981', ratio);
+
+                    return (
+                        <Polyline
+                            key={`route-segment-${index}`}
+                            positions={[startPoint, endPoint]}
+                            color={segmentColor}
+                            weight={5}
+                            opacity={0.92}
+                        />
+                    );
+                })
             )}
 
             {origin && (

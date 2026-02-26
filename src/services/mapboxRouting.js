@@ -4,6 +4,17 @@ const MAPBOX_PROFILE_BY_METHOD = {
   transit: 'driving-traffic',
 };
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function toRadians(value) {
   return (value * Math.PI) / 180;
 }
@@ -171,7 +182,7 @@ async function fetchMapboxDirections({ points, profile, mapboxToken }) {
   });
 
   const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}?${params.toString()}`;
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {}, 12000);
 
   if (!response.ok) {
     throw new Error(`Mapbox directions failed (${response.status}).`);
@@ -200,7 +211,7 @@ async function fetchMapboxOptimizedRoute({ points, profile, mapboxToken }) {
   });
 
   const url = `https://api.mapbox.com/optimized-trips/v1/mapbox/${profile}/${coordinates}?${params.toString()}`;
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {}, 8000);
 
   if (!response.ok) {
     throw new Error(`Mapbox optimization failed (${response.status}).`);
@@ -221,12 +232,26 @@ export async function getRouteEstimate({
   destination,
   locations = [],
   travelMethod = 'walk',
+  onStatus,
 }) {
+  const startedAt = Date.now();
+  const emitStatus = (message) => {
+    if (!onStatus) return;
+    onStatus({
+      message,
+      elapsedMs: Date.now() - startedAt,
+    });
+  };
+
+  emitStatus('Validating route endpoints...');
+
   if (!origin || !destination) {
     throw new Error('Origin and destination are required for route estimation.');
   }
 
   const points = buildRouteInput({ locations, origin, destination });
+  emitStatus(`Prepared ${points.length} stop(s).`);
+
   if (points.length < 2) {
     throw new Error('At least two route points are required.');
   }
@@ -238,16 +263,20 @@ export async function getRouteEstimate({
   const profile = MAPBOX_PROFILE_BY_METHOD[travelMethod] || 'walking';
 
   if (forceMock || !mapboxToken) {
+    emitStatus('Using mock routing provider...');
     return buildMockRoute(approximatedPoints, travelMethod);
   }
 
   if (points.length > 2) {
     try {
+      emitStatus('Calling Mapbox Optimization API...');
       return await fetchMapboxOptimizedRoute({ points, profile, mapboxToken });
     } catch (error) {
+      emitStatus('Optimization unavailable, falling back to Directions API...');
       console.warn('Optimization endpoint failed, falling back to Directions API:', error);
     }
   }
 
+  emitStatus('Calling Mapbox Directions API...');
   return fetchMapboxDirections({ points: approximatedPoints, profile, mapboxToken });
 }

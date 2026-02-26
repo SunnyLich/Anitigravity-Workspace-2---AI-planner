@@ -1,6 +1,6 @@
 # TripOptimizer Project Tracker
 
-Last updated: 2026-02-25
+Last updated: 2026-02-26
 Owner: Team
 
 ## 1) Why this file exists
@@ -37,10 +37,8 @@ Use this as the single handoff document for entry-level engineers.
 
 ### What does NOT work yet (known gaps)
 #### Simple
-- Selected travel method should be highlighted
-- right click on a POI and clicking set location(replacing set start/destination) should uses the location and name of the POI, right now its using name "map pin 'coordinate'". And the trash bin icon should not by default sit on the next line of the name, but on the same line
-- Allow the user to hide the saved custom nodes.
-- Use 5 different lines for "routing endpoints", "start", the 2 drop down menu and "destination" 
+- Selected travel method should be identifiable
+
 
 #### More Complex (for each of them details are to be asked and decided)
 - Show more meaningful information (to average users) on POI if they exist. 
@@ -172,6 +170,10 @@ Legend:
 ---
 
 ## 9) Change log
+- 2026-02-26:
+   - Routed live status updates into the Plan Trip panel during route estimation.
+   - Added in-panel elapsed-time display for routing progress visibility.
+   - Updated Optimize Schedule to also request route geometry for the optimized itinerary so the map shows a routed path instead of only the dotted straight-line fallback.
 - 2026-02-25:
   - Mapbox routing service integrated with mock/real modes.
   - POI overlay restored (3031 dots from `london-pois.json`).

@@ -16,8 +16,11 @@ function App() {
   const [locations, setLocations] = useState([]);
   const [itinerary, setItinerary] = useState([]);
   const [travelMethod, setTravelMethod] = useState('walk');
+  const [itineraryTravelMethod, setItineraryTravelMethod] = useState('walk');
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
+  const [routingStatusMessage, setRoutingStatusMessage] = useState('Waiting...');
+  const [routingElapsedSeconds, setRoutingElapsedSeconds] = useState(0);
   const [routeEstimate, setRouteEstimate] = useState(null);
   const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
   const [selectedStartId, setSelectedStartId] = useState('');
@@ -130,6 +133,21 @@ function App() {
     }
   }, [selectedStartId, selectedDestinationId]);
 
+  useEffect(() => {
+    if (!isRouting) {
+      setRoutingElapsedSeconds(0);
+      return undefined;
+    }
+
+    const startedAt = Date.now();
+    const intervalId = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setRoutingElapsedSeconds(elapsed);
+    }, 250);
+
+    return () => clearInterval(intervalId);
+  }, [isRouting]);
+
   const availableLocations = [...locations, ...customNodes];
 
   useEffect(() => {
@@ -189,21 +207,48 @@ function App() {
     setSelectedDestinationId(prev => (prev === locationId ? '' : prev));
   };
 
-  const handleOptimize = (locations, method) => {
+  const handleOptimize = async (locations, method) => {
     setIsOptimizing(true);
     setTravelMethod(method);
+    setItineraryTravelMethod(method);
+    setRouteEstimate(null);
+    setRoutingStatusMessage('Optimizing schedule...');
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const solver = new TSPSolver(locations, {
         travelSpeed: method === 'car' ? 40 : method === 'transit' ? 20 : 5,
         bufferTime: 15,
         startTime: "09:00"
       });
 
-      const result = solver.solve();
-      setItinerary(result);
-      setWindows(prev => ({ ...prev, itinerary: true }));
-      setIsOptimizing(false);
+      try {
+        const result = solver.solve();
+        setItinerary(result);
+        setWindows(prev => ({ ...prev, itinerary: true }));
+
+        if (result.length >= 2) {
+          const origin = result[0];
+          const destination = result[result.length - 1];
+          const middleStops = result.slice(1, -1);
+
+          const routedEstimate = await getRouteEstimate({
+            origin,
+            destination,
+            locations: middleStops,
+            travelMethod: method,
+            onStatus: (status) => setRoutingStatusMessage(status.message),
+          });
+
+          setRouteEndpoints({ origin, destination, source: 'itinerary-optimization' });
+          setRouteEstimate(routedEstimate);
+          setRoutingStatusMessage('Route ready.');
+        }
+      } catch (error) {
+        console.error('Could not optimize and route itinerary:', error);
+        setRoutingStatusMessage('Optimization route failed.');
+      } finally {
+        setIsOptimizing(false);
+      }
     }, 1200);
   };
 
@@ -221,6 +266,7 @@ function App() {
 
     setTravelMethod(method);
     setIsRouting(true);
+    setRoutingStatusMessage('Preparing route request...');
     setRouteEndpoints({ origin, destination, source: 'explicit-selection' });
 
     try {
@@ -229,10 +275,15 @@ function App() {
         destination,
         locations,
         travelMethod: method,
+        onStatus: (status) => {
+          setRoutingStatusMessage(status.message);
+        },
       });
+      setRoutingStatusMessage('Route ready.');
       setRouteEstimate(estimate);
     } catch (error) {
       console.error('Could not estimate route:', error);
+      setRoutingStatusMessage('Route failed.');
       setRouteEstimate({
         provider: 'error',
         message: error.message || 'Could not compute route estimate.',
@@ -412,6 +463,8 @@ function App() {
             onEstimateRoute={handleEstimateRoute}
             routeEstimate={routeEstimate}
             isRouting={isRouting}
+            routingStatusMessage={routingStatusMessage}
+            routingElapsedSeconds={routingElapsedSeconds}
             pois={pois}
             customNodes={customNodes}
             selectedStartId={selectedStartId}
@@ -424,7 +477,7 @@ function App() {
 
           <ItineraryWindow
             itinerary={itinerary}
-            travelMethod={travelMethod}
+            travelMethod={itineraryTravelMethod}
             isOpen={windows.itinerary}
             onClose={() => toggleWindow('itinerary')}
             onMinimize={() => toggleWindow('itinerary')}
@@ -473,8 +526,9 @@ function App() {
             {isOptimizing ? 'Computing Itinerary' : 'Computing Route'}
           </p>
           <p className="text-text-muted text-sm mt-2">
-            {isOptimizing ? 'Running TSP-TW heuristic algorithms...' : 'Calling routing service (mock or Mapbox)...'}
+            {isOptimizing ? 'Running TSP-TW heuristic algorithms...' : routingStatusMessage}
           </p>
+          {!isOptimizing && <p className="text-text-muted text-xs mt-1">Elapsed: {routingElapsedSeconds}s</p>}
         </div>
       )}
 
