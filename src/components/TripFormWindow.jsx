@@ -51,6 +51,8 @@ const TripFormWindow = ({
     onSetDestination,
     onEditCustomNode,
     onDeleteCustomNode,
+    tripDate,
+    onTripDateChange,
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
@@ -92,8 +94,6 @@ const TripFormWindow = ({
         setSearchResults([]);
     };
 
-    const selectorOptions = [...locations, ...customNodes];
-
     return (
         <WindowWrapper
             title="Plan Trip"
@@ -103,6 +103,19 @@ const TripFormWindow = ({
             style={{ top: '100px', left: '20px' }}
         >
             <div className="space-y-5">
+                <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Trip Date</label>
+                    <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+                        <input
+                            type="date"
+                            value={tripDate}
+                            onChange={(e) => onTripDateChange(e.target.value)}
+                            className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                        />
+                    </div>
+                </div>
+
                 <div className="space-y-2">
                     <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Travel Method</label>
                     <div className="flex bg-bg-deep p-1 rounded-xl border border-border-glass">
@@ -134,37 +147,6 @@ const TripFormWindow = ({
                                 <span className="ml-2 text-xs font-bold capitalize">{m}</span>
                             </button>
                         ))}
-                    </div>
-                    <p className="text-[11px] font-bold text-primary">Selected: {travelMethod}</p>
-                </div>
-
-                <div className="space-y-1">
-                    <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Routing Endpoints</div>
-                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Start</div>
-                    <div>
-                        <select
-                            className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm"
-                            value={selectedStartId}
-                            onChange={(e) => onSetStart(e.target.value)}
-                        >
-                            <option value="">Auto start (first trip location)</option>
-                            {selectorOptions.map(option => (
-                                <option key={option.id} value={option.id}>{option.name} ({option.source})</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Destination</div>
-                    <div>
-                        <select
-                            className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm"
-                            value={selectedDestinationId}
-                            onChange={(e) => onSetDestination(e.target.value)}
-                        >
-                            <option value="">Auto destination (last trip location)</option>
-                            {selectorOptions.map(option => (
-                                <option key={option.id} value={option.id}>{option.name} ({option.source})</option>
-                            ))}
-                        </select>
                     </div>
                 </div>
 
@@ -223,7 +205,7 @@ const TripFormWindow = ({
                 </div>
 
                 <button
-                    onClick={() => onOptimize(locations, travelMethod)}
+                    onClick={() => onOptimize(locations, travelMethod, tripDate)}
                     disabled={locations.length < 2}
                     className="w-full bg-primary hover:bg-primary-hover py-3.5 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
@@ -233,7 +215,7 @@ const TripFormWindow = ({
 
                 <button
                     onClick={() => onEstimateRoute(locations, travelMethod)}
-                    disabled={(locations.length < 2 && (!selectedStartId || !selectedDestinationId)) || isRouting}
+                    disabled={locations.length < 2 || isRouting}
                     className="w-full bg-white/5 hover:bg-white/10 py-3.5 rounded-xl font-bold text-sm transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-border-glass"
                 >
                     <MapPin size={16} />

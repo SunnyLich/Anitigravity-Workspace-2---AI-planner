@@ -1,6 +1,44 @@
-## Instructions for the agent
-### Workflow
-Always read all the context files and PROJECT_TRACKER.md for each prompt
-Propose minimal change.
-Ask questions if tasks have multiple viable solutions.
-Update PROJECT_TRACKER.md after finish
+# TripOptimizer (Mapbox-ready)
+
+This app plans trips and now includes a routing layer that supports:
+
+- Mock routing (default, no API key required)
+- Real Mapbox Directions API routing
+
+## Running locally
+
+```bash
+npm install
+npm run dev
+```
+
+## Environment configuration
+
+Create a `.env` file in the project root.
+
+### Default (mock routing)
+
+```bash
+VITE_USE_MOCK_ROUTING=true
+```
+
+### Real Mapbox routing
+
+```bash
+VITE_USE_MOCK_ROUTING=false
+VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
+```
+
+When mock mode is active, route estimates are deterministic simulated outputs so UI and workflows can be built before token access.
+
+## Current routing flow
+
+1. Add at least two locations in the Plan Trip window.
+2. Click **Estimate Route Time**.
+3. The app computes route distance/time and draws route geometry on the map.
+4. Provider in the UI shows `mock` or `mapbox`.
+
+## Notes
+
+- Existing itinerary optimization (`TSPSolver`) is still available and separate from point-to-point route estimation.
+- The app no longer depends on local parsed OSM POI data for map overlays.

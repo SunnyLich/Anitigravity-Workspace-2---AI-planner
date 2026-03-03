@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Compass, Search, CalendarCheck, Settings, Info, Map as MapIcon } from 'lucide-react';
+import { Compass, Search, CalendarCheck, Settings, Info, MapPin } from 'lucide-react';
 import { TripFormWindow } from './components/TripFormWindow';
 import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
 import { getRouteEstimate } from './services/mapboxRouting';
 import { createCustomLocation, normalizeLocation } from './utils/locationModel';
+import { loadPoisFromFolder } from './utils/poiLoader';
 
 const CUSTOM_NODES_STORAGE_KEY = 'tripoptimizer.customNodes';
 const TRIP_LOCATIONS_STORAGE_KEY = 'tripoptimizer.tripLocations';
@@ -17,6 +18,7 @@ function App() {
   const [itinerary, setItinerary] = useState([]);
   const [travelMethod, setTravelMethod] = useState('walk');
   const [itineraryTravelMethod, setItineraryTravelMethod] = useState('walk');
+  const [tripDate, setTripDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
   const [routingStatusMessage, setRoutingStatusMessage] = useState('Waiting...');
@@ -48,10 +50,13 @@ function App() {
   });
 
   useEffect(() => {
-    fetch('/london-pois.json')
-      .then(r => r.json())
-      .then(data => setPois(Array.isArray(data) ? data : []))
-      .catch(err => console.warn('Could not load POIs:', err));
+    try {
+      const loadedPois = loadPoisFromFolder();
+      setPois(Array.isArray(loadedPois) ? loadedPois : []);
+    } catch (error) {
+      console.warn('Could not load POIs from folder:', error);
+      setPois([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -207,10 +212,11 @@ function App() {
     setSelectedDestinationId(prev => (prev === locationId ? '' : prev));
   };
 
-  const handleOptimize = async (locations, method) => {
+  const handleOptimize = async (locations, method, date) => {
     setIsOptimizing(true);
     setTravelMethod(method);
     setItineraryTravelMethod(method);
+    if (date) setTripDate(date);
     setRouteEstimate(null);
     setRoutingStatusMessage('Optimizing schedule...');
 
@@ -250,6 +256,10 @@ function App() {
         setIsOptimizing(false);
       }
     }, 1200);
+  };
+
+  const handleItineraryUpdate = (updatedItinerary) => {
+    setItinerary(updatedItinerary);
   };
 
   const handleEstimateRoute = async (locations, method) => {
@@ -437,12 +447,12 @@ function App() {
           <div className="bg-primary p-2 rounded-xl shadow-lg shadow-primary/30">
             <Compass className="text-white" size={24} />
           </div>
-          <div>
+          <div className="flex items-center gap-3">
             <h1 className="text-lg font-black tracking-tight leading-none">TripOptimizer</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em]">Workspace v1.0</span>
-              <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></div>
-            </div>
+            <span className="text-xs font-bold text-text-muted flex items-center gap-1.5">
+              <MapPin size={14} className="text-primary" />
+              {`${pois.length} POIs`}
+            </span>
           </div>
         </div>
       </div>
@@ -473,11 +483,15 @@ function App() {
             onSetDestination={setSelectedDestinationId}
             onEditCustomNode={updateCustomNode}
             onDeleteCustomNode={deleteCustomNode}
+            tripDate={tripDate}
+            onTripDateChange={setTripDate}
           />
 
           <ItineraryWindow
             itinerary={itinerary}
             travelMethod={itineraryTravelMethod}
+            tripDate={tripDate}
+            onItineraryUpdate={handleItineraryUpdate}
             isOpen={windows.itinerary}
             onClose={() => toggleWindow('itinerary')}
             onMinimize={() => toggleWindow('itinerary')}
@@ -532,15 +546,6 @@ function App() {
         </div>
       )}
 
-      {/* Floating hint */}
-      <div className="absolute bottom-10 right-10" style={{ zIndex: 500 }}>
-        <div className="glass-panel px-4 py-2 flex items-center gap-3 text-xs font-bold text-text-muted">
-          <MapIcon size={14} className="text-primary" />
-          <span>
-            {`${pois.length} POIs • ${import.meta.env.VITE_USE_MOCK_ROUTING !== 'false' ? 'Mock' : 'Mapbox'} routing`}
-          </span>
-        </div>
-      </div>
     </div>
   );
 }

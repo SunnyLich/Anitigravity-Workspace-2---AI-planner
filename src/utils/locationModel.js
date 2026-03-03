@@ -23,11 +23,19 @@ export function normalizeLocation(raw, source = 'external') {
   if (lat === null || lng === null) return null;
 
   const name = (raw.name || raw.display_name || 'Unnamed location').trim();
+  const fallbackAddress = String(raw.display_name || '')
+    .split(',')
+    .slice(1)
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join(', ');
+  const address = (raw.address || fallbackAddress || '').trim();
   const id = raw.id ? buildId(source, raw.id) : buildId(source);
 
   return {
     id,
     name,
+    address,
     lat,
     lng,
     source,
@@ -53,7 +61,7 @@ export function createCustomLocation({ name, lat, lng, note = '' }) {
 }
 
 export function locationSearchText(location) {
-  return `${location.name} ${location.note || ''}`.toLowerCase();
+  return `${location.name} ${location.address || ''} ${location.note || ''}`.toLowerCase();
 }
 
 export function dedupeLocations(locations) {

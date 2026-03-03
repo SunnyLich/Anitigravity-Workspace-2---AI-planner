@@ -171,9 +171,15 @@ Legend:
 
 ## 9) Change log
 - 2026-02-26:
+   - Locations list now shows address text (when available) under place name.
+   - Clicking a location row in Plan Trip now pans/zooms the map to that location.
+   - POI address is now preserved in normalized location data for better display/search context.
+   - Removed routing status text/elapsed display from the Plan Trip panel and loading overlay per UX simplification request.
+   - Removed the in-panel "Route estimate (mapbox/mock)" summary card from Plan Trip UI while keeping route rendering on the map.
    - Routed live status updates into the Plan Trip panel during route estimation.
    - Added in-panel elapsed-time display for routing progress visibility.
    - Updated Optimize Schedule to also request route geometry for the optimized itinerary so the map shows a routed path instead of only the dotted straight-line fallback.
+   - Removed a decorative header status marker that could appear as a stray "-" near the top labels under certain UI scaling states.
 - 2026-02-25:
   - Mapbox routing service integrated with mock/real modes.
   - POI overlay restored (3031 dots from `london-pois.json`).
