@@ -28,6 +28,37 @@ const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style
     );
 };
 
+const formatCoordinate = (value) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '—';
+    return number.toFixed(5);
+};
+
+const scoreSearchResult = (location, query) => {
+    const normalizedQuery = String(query || '').toLowerCase().trim();
+    const name = String(location?.name || '').toLowerCase();
+    const address = String(location?.address || '').toLowerCase();
+
+    let score = 0;
+
+    if (!normalizedQuery) return Number(location?.importance) || 0;
+
+    if (name === normalizedQuery) score += 100;
+    if (name.startsWith(normalizedQuery)) score += 60;
+    if (name.includes(normalizedQuery)) score += 35;
+    if (address.includes(normalizedQuery)) score += 20;
+
+    const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    for (const token of tokens) {
+        if (name.includes(token)) score += 8;
+        if (address.includes(token)) score += 4;
+    }
+
+    score += (Number(location?.importance) || 0) * 30;
+
+    return score;
+};
+
 const TripFormWindow = ({
     isOpen,
     onClose,
@@ -38,11 +69,7 @@ const TripFormWindow = ({
     onRemoveLocation,
     onOptimize,
     onMinimize,
-    onEstimateRoute,
     routeEstimate,
-    isRouting,
-    routingStatusMessage,
-    routingElapsedSeconds,
     pois,
     customNodes,
     selectedStartId,
@@ -78,18 +105,44 @@ const TripFormWindow = ({
 
         let externalMatches = [];
         if (localMatches.length < 8) {
-            const external = await searchLocations(query, { limit: 8 - localMatches.length });
-            externalMatches = external
+            const remainingSlots = 8 - localMatches.length;
+
+            const strictExternal = await searchLocations(query, {
+                limit: remainingSlots,
+                countryCode: 'ca',
+                bounded: true,
+            });
+
+            const strictMatches = strictExternal
                 .map(item => normalizeLocation(item, 'nominatim'))
                 .filter(Boolean)
                 .sort((a, b) => Number(matchesLondonHint(b)) - Number(matchesLondonHint(a)));
+
+            externalMatches = strictMatches;
+
+            if (externalMatches.length === 0) {
+                const fallbackExternal = await searchLocations(query, {
+                    limit: remainingSlots,
+                    countryCode: '',
+                    bounded: false,
+                    viewbox: null,
+                });
+
+                externalMatches = fallbackExternal
+                    .map(item => normalizeLocation(item, 'nominatim'))
+                    .filter(Boolean);
+            }
         }
 
-        setSearchResults(dedupeLocations([...localMatches, ...externalMatches]).slice(0, 8));
+        const merged = dedupeLocations([...localMatches, ...externalMatches])
+            .sort((a, b) => scoreSearchResult(b, query) - scoreSearchResult(a, query))
+            .slice(0, 8);
+
+        setSearchResults(merged);
     };
 
     const addLocation = (loc) => {
-        onAddLocation(loc);
+        onAddLocation(loc, { focusOnMap: true });
         setSearchQuery('');
         setSearchResults([]);
     };
@@ -172,7 +225,15 @@ const TripFormWindow = ({
                                     className="w-full text-left px-4 py-3 hover:bg-primary/10 flex items-center gap-3 border-b border-border-glass last:border-0"
                                 >
                                     <MapPin size={14} className="text-primary shrink-0" />
-                                    <span className="text-xs truncate font-medium">{res.name}</span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs truncate font-medium">{res.name}</p>
+                                        {res.address && (
+                                            <p className="text-[10px] text-text-muted truncate">{res.address}</p>
+                                        )}
+                                        <p className="text-[10px] text-text-muted">
+                                            Lat {formatCoordinate(res.lat)} • Lng {formatCoordinate(res.lng)}
+                                        </p>
+                                    </div>
                                 </button>
                             ))}
                         </div>
@@ -212,23 +273,6 @@ const TripFormWindow = ({
                     <Calendar size={16} />
                     Optimize Schedule
                 </button>
-
-                <button
-                    onClick={() => onEstimateRoute(locations, travelMethod)}
-                    disabled={locations.length < 2 || isRouting}
-                    className="w-full bg-white/5 hover:bg-white/10 py-3.5 rounded-xl font-bold text-sm transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-border-glass"
-                >
-                    <MapPin size={16} />
-                    {isRouting ? 'Estimating Route...' : 'Estimate Route Time'}
-                </button>
-
-                {(isRouting || routeEstimate) && (
-                    <div className="glass-card space-y-1">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Routing Status</p>
-                        <p className="text-xs font-bold">{routingStatusMessage || 'Waiting...'}</p>
-                        <p className="text-[11px] text-text-muted">Elapsed: {routingElapsedSeconds}s</p>
-                    </div>
-                )}
 
                 <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">

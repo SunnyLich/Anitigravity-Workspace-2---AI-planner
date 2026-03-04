@@ -20,11 +20,9 @@ function App() {
   const [itineraryTravelMethod, setItineraryTravelMethod] = useState('walk');
   const [tripDate, setTripDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [isRouting, setIsRouting] = useState(false);
-  const [routingStatusMessage, setRoutingStatusMessage] = useState('Waiting...');
-  const [routingElapsedSeconds, setRoutingElapsedSeconds] = useState(0);
   const [routeEstimate, setRouteEstimate] = useState(null);
   const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
+  const [mapFocusTarget, setMapFocusTarget] = useState(null);
   const [selectedStartId, setSelectedStartId] = useState('');
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [customNodes, setCustomNodes] = useState([]);
@@ -138,21 +136,6 @@ function App() {
     }
   }, [selectedStartId, selectedDestinationId]);
 
-  useEffect(() => {
-    if (!isRouting) {
-      setRoutingElapsedSeconds(0);
-      return undefined;
-    }
-
-    const startedAt = Date.now();
-    const intervalId = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-      setRoutingElapsedSeconds(elapsed);
-    }, 250);
-
-    return () => clearInterval(intervalId);
-  }, [isRouting]);
-
   const availableLocations = [...locations, ...customNodes];
 
   useEffect(() => {
@@ -178,9 +161,22 @@ function App() {
     setWindows(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const addLocationToTrip = (rawLocation) => {
+  const focusMapOnLocation = (location) => {
+    if (!location) return;
+    setMapFocusTarget({
+      lat: location.lat,
+      lng: location.lng,
+      key: `${location.id || 'focus'}-${Date.now()}`,
+    });
+  };
+
+  const addLocationToTrip = (rawLocation, options = {}) => {
     const normalized = normalizeLocation(rawLocation, rawLocation.source || 'search');
     if (!normalized) return;
+
+    if (options.focusOnMap) {
+      focusMapOnLocation(normalized);
+    }
 
     setLocations(prev => {
       const exists = prev.some(item => item.id === normalized.id);
@@ -218,7 +214,6 @@ function App() {
     setItineraryTravelMethod(method);
     if (date) setTripDate(date);
     setRouteEstimate(null);
-    setRoutingStatusMessage('Optimizing schedule...');
 
     setTimeout(async () => {
       const solver = new TSPSolver(locations, {
@@ -242,16 +237,13 @@ function App() {
             destination,
             locations: middleStops,
             travelMethod: method,
-            onStatus: (status) => setRoutingStatusMessage(status.message),
           });
 
           setRouteEndpoints({ origin, destination, source: 'itinerary-optimization' });
           setRouteEstimate(routedEstimate);
-          setRoutingStatusMessage('Route ready.');
         }
       } catch (error) {
         console.error('Could not optimize and route itinerary:', error);
-        setRoutingStatusMessage('Optimization route failed.');
       } finally {
         setIsOptimizing(false);
       }
@@ -260,47 +252,6 @@ function App() {
 
   const handleItineraryUpdate = (updatedItinerary) => {
     setItinerary(updatedItinerary);
-  };
-
-  const handleEstimateRoute = async (locations, method) => {
-    const origin = selectedStartLocation || locations[0] || null;
-    const destination = selectedDestinationLocation || locations[locations.length - 1] || null;
-
-    if (!origin || !destination || origin.id === destination.id) {
-      setRouteEstimate({
-        provider: 'error',
-        message: 'Select two different endpoints (start and destination).',
-      });
-      return;
-    }
-
-    setTravelMethod(method);
-    setIsRouting(true);
-    setRoutingStatusMessage('Preparing route request...');
-    setRouteEndpoints({ origin, destination, source: 'explicit-selection' });
-
-    try {
-      const estimate = await getRouteEstimate({
-        origin,
-        destination,
-        locations,
-        travelMethod: method,
-        onStatus: (status) => {
-          setRoutingStatusMessage(status.message);
-        },
-      });
-      setRoutingStatusMessage('Route ready.');
-      setRouteEstimate(estimate);
-    } catch (error) {
-      console.error('Could not estimate route:', error);
-      setRoutingStatusMessage('Route failed.');
-      setRouteEstimate({
-        provider: 'error',
-        message: error.message || 'Could not compute route estimate.',
-      });
-    } finally {
-      setIsRouting(false);
-    }
   };
 
   return (
@@ -312,6 +263,7 @@ function App() {
           routeGeometry={routeEstimate?.geometry || []}
           origin={selectedStartLocation || routeEndpoints.origin}
           destination={selectedDestinationLocation || routeEndpoints.destination}
+          focusTarget={mapFocusTarget}
           customNodes={customNodes}
           pois={pois}
           onMapContextMenu={(payload) => {
@@ -470,11 +422,7 @@ function App() {
             onAddLocation={addLocationToTrip}
             onRemoveLocation={removeLocationFromTrip}
             onOptimize={handleOptimize}
-            onEstimateRoute={handleEstimateRoute}
             routeEstimate={routeEstimate}
-            isRouting={isRouting}
-            routingStatusMessage={routingStatusMessage}
-            routingElapsedSeconds={routingElapsedSeconds}
             pois={pois}
             customNodes={customNodes}
             selectedStartId={selectedStartId}
@@ -530,19 +478,18 @@ function App() {
       </div>
 
       {/* Loading Overlay */}
-      {(isOptimizing || isRouting) && (
+      {isOptimizing && (
         <div className="fixed inset-0 bg-bg-deep/40 backdrop-blur-md flex flex-col items-center justify-center" style={{ zIndex: 1000 }}>
           <div className="relative">
             <div className="w-20 h-20 border-4 border-primary/20 rounded-full"></div>
             <div className="absolute inset-0 w-20 h-20 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           </div>
           <p className="mt-6 font-black text-xl tracking-widest uppercase animate-pulse">
-            {isOptimizing ? 'Computing Itinerary' : 'Computing Route'}
+            Computing Itinerary
           </p>
           <p className="text-text-muted text-sm mt-2">
-            {isOptimizing ? 'Running TSP-TW heuristic algorithms...' : routingStatusMessage}
+            Running TSP-TW heuristic algorithms...
           </p>
-          {!isOptimizing && <p className="text-text-muted text-xs mt-1">Elapsed: {routingElapsedSeconds}s</p>}
         </div>
       )}
 

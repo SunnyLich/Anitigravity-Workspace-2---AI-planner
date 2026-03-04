@@ -28,6 +28,18 @@ const RecenterMap = ({ points }) => {
     return null;
 };
 
+const FocusMapTarget = ({ target }) => {
+    const map = useMap();
+
+    useEffect(() => {
+        if (!target) return;
+        const zoom = Math.max(map.getZoom(), 15);
+        map.flyTo([target.lat, target.lng], zoom, { animate: true, duration: 0.75 });
+    }, [target, map]);
+
+    return null;
+};
+
 // London, Ontario centre
 const LONDON_ON = [42.9849, -81.2453];
 
@@ -100,6 +112,7 @@ const MapDisplay = ({
     routeGeometry = [],
     origin,
     destination,
+    focusTarget,
     pois = [],
     customNodes = [],
     onMapContextMenu,
@@ -248,6 +261,7 @@ const MapDisplay = ({
                 </Marker>
             )}
 
+            <FocusMapTarget target={focusTarget} />
             <RecenterMap points={points} />
         </MapContainer>
     );

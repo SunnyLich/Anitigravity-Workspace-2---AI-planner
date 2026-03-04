@@ -10,7 +10,7 @@ function tokenize(text) {
 
 function buildEntry(location, sourcePriority = 1) {
   const label = location.name || 'Unnamed location';
-  const searchableText = `${label} ${location.note || ''}`.toLowerCase();
+  const searchableText = `${label} ${location.address || ''} ${location.note || ''}`.toLowerCase();
   const tokens = tokenize(searchableText);
 
   return {
@@ -49,7 +49,9 @@ function scoreEntry(entry, queryTokens, rawQuery) {
     if (entry.searchableText.includes(token)) score += 2;
   }
 
-  score += entry.sourcePriority * 4;
+  if (score <= 0) return 0;
+
+  score += entry.sourcePriority * 0.5;
 
   return score;
 }

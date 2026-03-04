@@ -14,17 +14,24 @@ export const searchLocations = async (query, options = {}) => {
     if (!query || query.length < 3) return [];
 
     const limit = options.limit || 5;
-    const countryCode = options.countryCode || 'ca';
-    const viewbox = options.viewbox || LONDON_VIEWBOX;
+    const countryCode = options.countryCode ?? 'ca';
+    const viewbox = options.viewbox ?? LONDON_VIEWBOX;
+    const bounded = options.bounded ?? true;
 
     const params = new URLSearchParams({
         format: 'json',
         q: query,
         limit: String(limit),
-        countrycodes: countryCode,
-        bounded: '1',
-        viewbox: `${viewbox.left},${viewbox.top},${viewbox.right},${viewbox.bottom}`,
     });
+
+    if (countryCode) {
+        params.set('countrycodes', countryCode);
+    }
+
+    if (bounded && viewbox) {
+        params.set('bounded', '1');
+        params.set('viewbox', `${viewbox.left},${viewbox.top},${viewbox.right},${viewbox.bottom}`);
+    }
 
     const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
 

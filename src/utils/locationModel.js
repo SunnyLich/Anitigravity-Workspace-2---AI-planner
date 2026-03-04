@@ -38,6 +38,7 @@ export function normalizeLocation(raw, source = 'external') {
     address,
     lat,
     lng,
+    importance: Number.isFinite(Number(raw.importance)) ? Number(raw.importance) : 0,
     source,
     note: raw.note || '',
     openingHours: raw.openingHours || DEFAULT_OPENING_HOURS,
