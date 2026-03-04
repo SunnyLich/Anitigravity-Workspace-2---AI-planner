@@ -31,6 +31,13 @@ const formatTripDate = (dateValue) => {
 };
 
 const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, isOpen, onClose, onMinimize }) => {
+    const openNativeTimePicker = (event) => {
+        const input = event.currentTarget;
+        if (typeof input.showPicker === 'function') {
+            input.showPicker();
+        }
+    };
+
     const exportPDF = () => {
         const input = document.getElementById('itinerary-content-inner');
         html2canvas(input, { scale: 2, useCORS: true, backgroundColor: '#0f172a' }).then((canvas) => {
@@ -177,6 +184,9 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                             type="time"
                                             value={item.arrivalTime}
                                             onChange={(e) => handleArrivalChange(idx, e.target.value)}
+                                            onClick={openNativeTimePicker}
+                                            onFocus={openNativeTimePicker}
+                                            step={900}
                                             className="bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold"
                                         />
                                         <span className="text-[10px] text-text-muted font-bold">to</span>
@@ -184,6 +194,9 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                             type="time"
                                             value={item.departureTime}
                                             onChange={(e) => handleDepartureChange(idx, e.target.value)}
+                                            onClick={openNativeTimePicker}
+                                            onFocus={openNativeTimePicker}
+                                            step={900}
                                             className="bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold"
                                         />
                                         {item.waitTime > 0 && (

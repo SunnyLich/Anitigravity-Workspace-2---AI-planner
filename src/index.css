@@ -30,6 +30,12 @@ body {
   overflow-x: hidden;
 }
 
+body.dragging-window,
+body.dragging-window * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 #root {
   width: 100%;
   min-height: 100vh;
@@ -227,6 +233,10 @@ h4 {
 
 .leaflet-control-zoom {
   margin-top: 80px !important;
+}
+
+.leaflet-control-zoom-out {
+  display: none !important;
 }
 
 /* ============================================================

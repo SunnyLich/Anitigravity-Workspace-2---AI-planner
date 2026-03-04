@@ -13,6 +13,20 @@ const TRIP_LOCATIONS_STORAGE_KEY = 'tripoptimizer.tripLocations';
 const SELECTED_ENDPOINTS_STORAGE_KEY = 'tripoptimizer.selectedEndpoints';
 const TRAVEL_METHOD_STORAGE_KEY = 'tripoptimizer.travelMethod';
 
+const LOCATION_KEY_PRECISION = 5;
+
+const toLocationKey = (location) => {
+  const name = String(location?.name || '').trim().toLowerCase();
+  const lat = Number(location?.lat);
+  const lng = Number(location?.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return `${name}|invalid`;
+  }
+
+  return `${name}|${lat.toFixed(LOCATION_KEY_PRECISION)}|${lng.toFixed(LOCATION_KEY_PRECISION)}`;
+};
+
 function App() {
   const [locations, setLocations] = useState([]);
   const [itinerary, setItinerary] = useState([]);
@@ -254,6 +268,29 @@ function App() {
     setItinerary(updatedItinerary);
   };
 
+  const isLocationSaved = (location) => {
+    const targetKey = toLocationKey(location);
+    return customNodes.some((node) => toLocationKey(node) === targetKey);
+  };
+
+  const saveLocationAsSavedLocation = (location) => {
+    const normalized = normalizeLocation(location, 'custom');
+    if (!normalized) return;
+
+    setCustomNodes((prev) => {
+      const alreadySaved = prev.some((node) => toLocationKey(node) === toLocationKey(normalized));
+      if (alreadySaved) return prev;
+
+      const savedLocation = {
+        ...normalized,
+        id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        source: 'custom',
+      };
+
+      return [...prev, savedLocation];
+    });
+  };
+
   return (
     <div className="h-screen w-screen bg-bg-deep overflow-hidden relative">
       {/* Background Layer: Map — full screen, behind everything */}
@@ -340,7 +377,7 @@ function App() {
               setMapContextMenu(prev => ({ ...prev, visible: false }));
             }}
           >
-            Create Custom Location Here
+            Create Saved Location Here
           </button>
         </div>
       )}
@@ -350,7 +387,7 @@ function App() {
           className="glass-panel p-4 space-y-3"
           style={{ position: 'absolute', bottom: 90, left: 20, zIndex: 1200, width: 320 }}
         >
-          <p className="text-xs font-black uppercase tracking-wider text-text-muted">Create Custom Location</p>
+          <p className="text-xs font-black uppercase tracking-wider text-text-muted">Create Saved Location</p>
           <p className="text-[11px] text-text-muted">{customNodeDraft.lat?.toFixed(6)}, {customNodeDraft.lng?.toFixed(6)}</p>
           <input
             value={customNodeDraft.name}
@@ -429,8 +466,10 @@ function App() {
             selectedDestinationId={selectedDestinationId}
             onSetStart={setSelectedStartId}
             onSetDestination={setSelectedDestinationId}
-            onEditCustomNode={updateCustomNode}
-            onDeleteCustomNode={deleteCustomNode}
+            onEditLocation={updateCustomNode}
+            onDeleteLocation={deleteCustomNode}
+            onSaveLocation={saveLocationAsSavedLocation}
+            isLocationSaved={isLocationSaved}
             tripDate={tripDate}
             onTripDateChange={setTripDate}
           />

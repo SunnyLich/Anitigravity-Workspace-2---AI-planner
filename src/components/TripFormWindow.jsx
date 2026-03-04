@@ -1,13 +1,77 @@
-import React, { useMemo, useState } from 'react';
-import { X, Minus, MapPin, Search, Footprints, Car, Train, Calendar, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Minus, MapPin, Search, Footprints, Car, Train, Calendar, Trash2, Star } from 'lucide-react';
 import { searchLocations } from '../services/nominatim';
 import { dedupeLocations, locationSearchText, normalizeLocation } from '../utils/locationModel';
 import { buildLocalSearchIndex, matchesLondonHint, searchLocalIndex } from '../utils/localSearch';
 
-const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style }) => {
+const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style, draggable = false }) => {
+    const initialTop = Number.isFinite(Number(style?.top)) ? Number(style.top) : 100;
+    const initialLeft = Number.isFinite(Number(style?.left)) ? Number(style.left) : 20;
+
+    const [position, setPosition] = useState({ top: initialTop, left: initialLeft });
+    const [dragging, setDragging] = useState(false);
+    const dragOffsetRef = useRef({ x: 0, y: 0 });
+
+    useEffect(() => {
+        if (dragging) {
+            document.body.classList.add('dragging-window');
+        } else {
+            document.body.classList.remove('dragging-window');
+        }
+
+        return () => {
+            document.body.classList.remove('dragging-window');
+        };
+    }, [dragging]);
+
+    useEffect(() => {
+        if (!dragging) return undefined;
+
+        const handleMouseMove = (event) => {
+            const nextLeft = Math.max(8, event.clientX - dragOffsetRef.current.x);
+            const nextTop = Math.max(8, event.clientY - dragOffsetRef.current.y);
+            setPosition({ left: nextLeft, top: nextTop });
+        };
+
+        const handleMouseUp = () => {
+            setDragging(false);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [dragging]);
+
+    const handleDragStart = (event) => {
+        if (!draggable) return;
+        if (event.target.closest('button')) return;
+
+        event.preventDefault();
+
+        dragOffsetRef.current = {
+            x: event.clientX - position.left,
+            y: event.clientY - position.top,
+        };
+        setDragging(true);
+    };
+
+    const wrapperStyle = draggable
+        ? {
+            ...style,
+            left: `${position.left}px`,
+            top: `${position.top}px`,
+            right: 'auto',
+            maxHeight: '85vh',
+        }
+        : style;
+
     return (
-        <div className="glass-panel workspace-window animate-in fade-in zoom-in-95 duration-200" style={style}>
-            <div className="window-header">
+        <div className="glass-panel workspace-window animate-in fade-in zoom-in-95 duration-200" style={wrapperStyle}>
+            <div className="window-header" onMouseDown={handleDragStart}>
                 <div className="flex items-center gap-2">
                     {Icon && <Icon size={16} className="text-primary" />}
                     <span className="text-sm font-bold tracking-tight">{title}</span>
@@ -21,7 +85,7 @@ const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style
                     </button>
                 </div>
             </div>
-            <div className="window-content custom-scrollbar">
+            <div className="window-content custom-scrollbar" onWheel={(event) => event.stopPropagation()}>
                 {children}
             </div>
         </div>
@@ -76,14 +140,28 @@ const TripFormWindow = ({
     selectedDestinationId,
     onSetStart,
     onSetDestination,
-    onEditCustomNode,
-    onDeleteCustomNode,
+    onEditLocation,
+    onDeleteLocation,
+    onSaveLocation,
+    isLocationSaved,
     tripDate,
     onTripDateChange,
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [showSavedNodes, setShowSavedNodes] = useState(true);
+
+    const selectableLocations = useMemo(() => {
+        const merged = [...locations, ...customNodes];
+        const seen = new Set();
+
+        return merged.filter((loc) => {
+            const key = `${String(loc?.name || '').toLowerCase()}|${Number(loc?.lat).toFixed(5)}|${Number(loc?.lng).toFixed(5)}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }, [locations, customNodes]);
 
     const localSearchIndex = useMemo(
         () => buildLocalSearchIndex({ pois, customNodes }),
@@ -154,6 +232,7 @@ const TripFormWindow = ({
             onClose={onClose}
             onMinimize={onMinimize}
             style={{ top: '100px', left: '20px' }}
+            draggable={true}
         >
             <div className="space-y-5">
                 <div className="space-y-2">
@@ -250,6 +329,14 @@ const TripFormWindow = ({
                                     {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
                                 </div>
                                 <button
+                                    onClick={() => onSaveLocation(loc)}
+                                    disabled={isLocationSaved(loc)}
+                                    className="shrink-0 text-primary/70 hover:text-primary p-1.5 rounded-md hover:bg-primary/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title={isLocationSaved(loc) ? 'Already saved' : 'Save as location'}
+                                >
+                                    <Star size={14} fill={isLocationSaved(loc) ? 'currentColor' : 'none'} />
+                                </button>
+                                <button
                                     onClick={() => onRemoveLocation(loc.id)}
                                     className="shrink-0 text-accent/60 hover:text-accent p-1.5 rounded-md hover:bg-accent/10 transition-all"
                                 >
@@ -265,6 +352,51 @@ const TripFormWindow = ({
                     </div>
                 </div>
 
+                <div className="space-y-2">
+                    <table className="w-full border-separate" style={{ borderSpacing: '0 8px' }}>
+                        <tbody>
+                            <tr>
+                                <td className="w-[110px] align-middle pr-5">
+                                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Start</label>
+                                </td>
+                                <td>
+                                    <div className="flex justify-end">
+                                        <select
+                                            value={selectedStartId}
+                                            onChange={(e) => onSetStart(e.target.value)}
+                                            className="w-[94%] min-w-0 bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-xs font-bold outline-none"
+                                        >
+                                            <option value="">Auto start (first location)</option>
+                                            {selectableLocations.map((loc) => (
+                                                <option key={`start-${loc.id}`} value={loc.id}>{loc.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="w-[110px] align-middle pr-5">
+                                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Destination</label>
+                                </td>
+                                <td>
+                                    <div className="flex justify-end">
+                                        <select
+                                            value={selectedDestinationId}
+                                            onChange={(e) => onSetDestination(e.target.value)}
+                                            className="w-[94%] min-w-0 bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-xs font-bold outline-none"
+                                        >
+                                            <option value="">Auto destination (last location)</option>
+                                            {selectableLocations.map((loc) => (
+                                                <option key={`destination-${loc.id}`} value={loc.id}>{loc.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
                 <button
                     onClick={() => onOptimize(locations, travelMethod, tripDate)}
                     disabled={locations.length < 2}
@@ -276,11 +408,11 @@ const TripFormWindow = ({
 
                 <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">Saved Custom Nodes ({customNodes.length})</label>
+                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">Saved Locations ({customNodes.length})</label>
                         <button
                             onClick={() => setShowSavedNodes(prev => !prev)}
                             className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-border-glass"
-                            title={showSavedNodes ? 'Collapse saved nodes' : 'Expand saved nodes'}
+                            title={showSavedNodes ? 'Collapse saved locations' : 'Expand saved locations'}
                         >
                             {showSavedNodes ? '▾' : '▸'}
                         </button>
@@ -295,16 +427,16 @@ const TripFormWindow = ({
                                     <div className="flex gap-1">
                                         <button
                                             onClick={() => {
-                                                const editedName = window.prompt('Rename custom location', node.name);
+                                                const editedName = window.prompt('Rename saved location', node.name);
                                                 if (!editedName) return;
-                                                onEditCustomNode(node.id, { name: editedName.trim() });
+                                                onEditLocation(node.id, { name: editedName.trim() });
                                             }}
                                             className="text-[10px] px-2 py-1 rounded-md hover:bg-white/10"
                                         >
                                             Edit
                                         </button>
                                         <button
-                                            onClick={() => onDeleteCustomNode(node.id)}
+                                            onClick={() => onDeleteLocation(node.id)}
                                             className="text-[10px] px-2 py-1 rounded-md hover:bg-accent/20 text-accent"
                                         >
                                             Delete
@@ -314,19 +446,19 @@ const TripFormWindow = ({
                                 <div className="mt-2 flex gap-1.5">
                                     <button
                                         onClick={() => onSetStart(node.id)}
-                                        className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10"
+                                        className="text-[10px] px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10"
                                     >
                                         Set Start
                                     </button>
                                     <button
                                         onClick={() => onSetDestination(node.id)}
-                                        className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10"
+                                        className="text-[10px] px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10"
                                     >
                                         Set Destination
                                     </button>
                                     <button
                                         onClick={() => onAddLocation(node)}
-                                        className="text-[10px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10"
+                                        className="text-[10px] px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10"
                                     >
                                         Add To Trip
                                     </button>
@@ -335,7 +467,7 @@ const TripFormWindow = ({
                         ))}
                         {customNodes.length === 0 && (
                             <div className="text-center py-4 border border-dashed border-border-glass rounded-xl text-text-muted text-xs">
-                                No saved custom nodes
+                                No saved locations
                             </div>
                         )}
                         </div>
