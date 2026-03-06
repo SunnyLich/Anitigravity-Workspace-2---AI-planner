@@ -1,0 +1,41 @@
+flowchart TD
+    A[src/main.jsx] --> B[src/App.jsx]
+
+    B -->|props + callbacks| C[src/components/TripFormWindow.jsx]
+    B -->|props + callbacks| D[src/components/ItineraryWindow.jsx]
+    B -->|props + callbacks| E[src/components/MapDisplay.jsx]
+
+    C -->|searchLocations| F[src/services/nominatim.js]
+    C -->|buildLocalSearchIndex/searchLocalIndex| G[src/utils/localSearch.js]
+    C -->|normalize/dedupe| H[src/utils/locationModel.js]
+
+    B -->|load POIs| I[src/utils/poiLoader.js]
+    I --> J[src/data/pois/*.json]
+
+    C -->|onOptimize(locations, method, date)| B
+    B -->|solve()| K[src/utils/tspSolver.js]
+    B -->|getRouteEstimate(origin,destination,method)| L[src/services/mapboxRouting.js]
+
+    B -->|itinerary + routeGeometry + endpoints| E
+    D -->|onItineraryUpdate(updated)| B
+    E -->|onMapContextMenu/onMapClick| B
+
+    B -->|persist/restore state| M[localStorage]
+
+    subgraph "App-owned state"
+      N[locations]
+      O[itinerary]
+      P[travelMethod/tripDate]
+      Q[customNodes + pois]
+      R[selectedStartId/selectedDestinationId]
+      S[routeEstimate + routeEndpoints]
+      T[mapContextMenu + mapFocusTarget]
+    end
+
+    B --- N
+    B --- O
+    B --- P
+    B --- Q
+    B --- R
+    B --- S
+    B --- T

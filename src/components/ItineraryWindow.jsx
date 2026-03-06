@@ -137,9 +137,11 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
             style={{ top: '100px', right: '20px' }}
         >
             <div className="space-y-4">
-                <div className="glass-card flex items-center justify-between py-2 px-3">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Date</span>
-                    <span className="text-xs font-bold">{formatTripDate(tripDate)}</span>
+                <div className="glass-card py-2 px-3">
+                    <div className="flex items-center gap-4">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Date</span>
+                        <span className="text-xs font-bold">{formatTripDate(tripDate)}</span>
+                    </div>
                 </div>
 
                 <div className="flex gap-2 mb-4">
@@ -164,15 +166,12 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                 </div>
                             )}
 
-                            <div className="glass-card flex gap-3 p-3 relative hover:border-primary/50 transition-all border border-transparent">
-                                <div className="flex flex-col items-center">
-                                    <div className="bg-primary/20 p-2 rounded-lg text-primary">
-                                        <MapPin size={16} />
-                                    </div>
-                                </div>
-
-                                <div className="flex-1 min-w-0 space-y-1">
-                                    <div className="flex justify-between items-start gap-2">
+                            <div className="glass-card p-3 relative hover:border-primary/50 transition-all border border-transparent">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="bg-primary/20 p-1.5 rounded-lg text-primary shrink-0">
+                                            <MapPin size={14} />
+                                        </div>
                                         <h4 className="font-bold text-sm truncate">{item.name.split(',')[0]}</h4>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">

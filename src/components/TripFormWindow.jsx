@@ -323,25 +323,29 @@ const TripFormWindow = ({
                     <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">Locations ({locations.length})</label>
                     <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                         {locations.map((loc) => (
-                            <div key={loc.id} className="glass-card flex items-center justify-between gap-3 p-3">
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold truncate" title={loc.name}>{loc.name}</p>
-                                    {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
+                            <div key={loc.id} className="glass-card p-3">
+                                <div className="flex items-start gap-2">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold truncate" title={loc.name}>{loc.name}</p>
+                                        {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
+                                    </div>
+                                    <div className="shrink-0 flex items-center gap-1">
+                                        <button
+                                            onClick={() => onSaveLocation(loc)}
+                                            disabled={isLocationSaved(loc)}
+                                            className="text-primary/70 hover:text-primary p-1.5 rounded-md hover:bg-primary/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                            title={isLocationSaved(loc) ? 'Already saved' : 'Save as location'}
+                                        >
+                                            <Star size={14} fill={isLocationSaved(loc) ? 'currentColor' : 'none'} />
+                                        </button>
+                                        <button
+                                            onClick={() => onRemoveLocation(loc.id)}
+                                            className="text-accent/60 hover:text-accent p-1.5 rounded-md hover:bg-accent/10 transition-all"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                 </div>
-                                <button
-                                    onClick={() => onSaveLocation(loc)}
-                                    disabled={isLocationSaved(loc)}
-                                    className="shrink-0 text-primary/70 hover:text-primary p-1.5 rounded-md hover:bg-primary/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                    title={isLocationSaved(loc) ? 'Already saved' : 'Save as location'}
-                                >
-                                    <Star size={14} fill={isLocationSaved(loc) ? 'currentColor' : 'none'} />
-                                </button>
-                                <button
-                                    onClick={() => onRemoveLocation(loc.id)}
-                                    className="shrink-0 text-accent/60 hover:text-accent p-1.5 rounded-md hover:bg-accent/10 transition-all"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
                             </div>
                         ))}
                         {locations.length === 0 && (

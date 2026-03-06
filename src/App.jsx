@@ -431,12 +431,15 @@ function App() {
       {/* All UI sits above the map via explicit z-index */}
 
       {/* Header Area */}
-      <div className="absolute top-6 left-6 flex items-center gap-4" style={{ zIndex: 400 }}>
-        <div className="glass-panel p-3 flex items-center gap-3 border-primary/20 bg-primary/10">
+      <div className="absolute top-6 left-6" style={{ zIndex: 400 }}>
+        <div
+          className="glass-panel p-3 border-primary/20 bg-primary/10"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 12, whiteSpace: 'nowrap' }}
+        >
           <div className="bg-primary p-2 rounded-xl shadow-lg shadow-primary/30">
             <Compass className="text-white" size={24} />
           </div>
-          <div className="flex items-center gap-3">
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'nowrap' }}>
             <h1 className="text-lg font-black tracking-tight leading-none">TripOptimizer</h1>
             <span className="text-xs font-bold text-text-muted flex items-center gap-1.5">
               <MapPin size={14} className="text-primary" />
