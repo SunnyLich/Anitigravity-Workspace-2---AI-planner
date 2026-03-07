@@ -12,6 +12,8 @@ const CUSTOM_NODES_STORAGE_KEY = 'tripoptimizer.customNodes';
 const TRIP_LOCATIONS_STORAGE_KEY = 'tripoptimizer.tripLocations';
 const SELECTED_ENDPOINTS_STORAGE_KEY = 'tripoptimizer.selectedEndpoints';
 const TRAVEL_METHOD_STORAGE_KEY = 'tripoptimizer.travelMethod';
+const OPTIMIZER_MODE_STORAGE_KEY = 'tripoptimizer.optimizerMode';
+const TIME_BUDGET_STORAGE_KEY = 'tripoptimizer.timeBudgetMinutes';
 
 const LOCATION_KEY_PRECISION = 5;
 
@@ -33,6 +35,8 @@ function App() {
   const [travelMethod, setTravelMethod] = useState('walk');
   const [itineraryTravelMethod, setItineraryTravelMethod] = useState('walk');
   const [tripDate, setTripDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [optimizerMode, setOptimizerMode] = useState('shortest-feasible');
+  const [timeBudgetMinutes, setTimeBudgetMinutes] = useState(240);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [routeEstimate, setRouteEstimate] = useState(null);
   const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
@@ -50,6 +54,8 @@ function App() {
     sourceType: 'map',
     sourceId: null,
     sourceName: '',
+    sourceOpeningHours: null,
+    sourceOpeningHoursText: '',
   });
   const [customNodeDraft, setCustomNodeDraft] = useState({ open: false, lat: null, lng: null, name: '', note: '' });
 
@@ -100,6 +106,8 @@ function App() {
       const rawLocations = localStorage.getItem(TRIP_LOCATIONS_STORAGE_KEY);
       const rawTravelMethod = localStorage.getItem(TRAVEL_METHOD_STORAGE_KEY);
       const rawEndpoints = localStorage.getItem(SELECTED_ENDPOINTS_STORAGE_KEY);
+      const rawOptimizerMode = localStorage.getItem(OPTIMIZER_MODE_STORAGE_KEY);
+      const rawTimeBudgetMinutes = localStorage.getItem(TIME_BUDGET_STORAGE_KEY);
 
       if (rawLocations) {
         const parsedLocations = JSON.parse(rawLocations);
@@ -111,6 +119,15 @@ function App() {
 
       if (rawTravelMethod && ['walk', 'car', 'transit'].includes(rawTravelMethod)) {
         setTravelMethod(rawTravelMethod);
+      }
+
+      if (rawOptimizerMode && ['shortest-feasible', 'max-priority-budget'].includes(rawOptimizerMode)) {
+        setOptimizerMode(rawOptimizerMode);
+      }
+
+      if (Number.isFinite(Number(rawTimeBudgetMinutes))) {
+        const parsedBudget = Math.round(Number(rawTimeBudgetMinutes));
+        setTimeBudgetMinutes(Math.min(24 * 60, Math.max(30, parsedBudget)));
       }
 
       if (rawEndpoints) {
@@ -138,6 +155,22 @@ function App() {
       console.warn('Could not save travel method:', error);
     }
   }, [travelMethod]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OPTIMIZER_MODE_STORAGE_KEY, optimizerMode);
+    } catch (error) {
+      console.warn('Could not save optimizer mode:', error);
+    }
+  }, [optimizerMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TIME_BUDGET_STORAGE_KEY, String(timeBudgetMinutes));
+    } catch (error) {
+      console.warn('Could not save time budget:', error);
+    }
+  }, [timeBudgetMinutes]);
 
   useEffect(() => {
     try {
@@ -203,6 +236,15 @@ function App() {
     setLocations(prev => prev.filter(item => item.id !== locationId));
   };
 
+  const updateTripLocationPriority = (locationId, priorityValue) => {
+    const normalizedPriority = Math.min(5, Math.max(1, Math.round(Number(priorityValue) || 1)));
+    setLocations((prev) => prev.map((item) => (
+      item.id === locationId
+        ? { ...item, priority: normalizedPriority, userPriority: normalizedPriority }
+        : item
+    )));
+  };
+
   const updateCustomNode = (locationId, updates) => {
     setCustomNodes(prev =>
       prev.map(item => {
@@ -222,22 +264,35 @@ function App() {
     setSelectedDestinationId(prev => (prev === locationId ? '' : prev));
   };
 
-  const handleOptimize = async (locations, method, date) => {
+  const handleOptimize = async (payload, fallbackMethod, fallbackDate) => {
+    const runLocations = Array.isArray(payload) ? payload : (payload?.locations || []);
+    const method = Array.isArray(payload) ? fallbackMethod : payload?.travelMethod;
+    const date = Array.isArray(payload) ? fallbackDate : payload?.tripDate;
+    const mode = Array.isArray(payload) ? optimizerMode : (payload?.optimizerMode || optimizerMode);
+    const budget = Array.isArray(payload)
+      ? timeBudgetMinutes
+      : Math.min(24 * 60, Math.max(30, Math.round(Number(payload?.timeBudgetMinutes) || timeBudgetMinutes)));
+
     setIsOptimizing(true);
     setTravelMethod(method);
     setItineraryTravelMethod(method);
     if (date) setTripDate(date);
+    if (mode) setOptimizerMode(mode);
+    if (Number.isFinite(budget)) setTimeBudgetMinutes(budget);
     setRouteEstimate(null);
 
     setTimeout(async () => {
-      const solver = new TSPSolver(locations, {
+      const solver = new TSPSolver(runLocations, {
         travelSpeed: method === 'car' ? 40 : method === 'transit' ? 20 : 5,
         bufferTime: 15,
         startTime: "09:00"
       });
 
       try {
-        const result = solver.solve();
+        const result = solver.solve({
+          mode,
+          timeBudgetMinutes: budget,
+        });
         setItinerary(result);
         setWindows(prev => ({ ...prev, itinerary: true }));
 
@@ -313,6 +368,8 @@ function App() {
               sourceType: payload.sourceType || 'map',
               sourceId: payload.sourceId || null,
               sourceName: payload.sourceName || '',
+              sourceOpeningHours: payload.sourceOpeningHours || null,
+              sourceOpeningHoursText: payload.sourceOpeningHoursText || '',
             });
           }}
           onMapClick={() => setMapContextMenu(prev => ({ ...prev, visible: false }))}
@@ -339,6 +396,8 @@ function App() {
                     name: mapContextMenu.sourceName,
                     lat: mapContextMenu.lat,
                     lng: mapContextMenu.lng,
+                    openingHours: mapContextMenu.sourceOpeningHours,
+                    openingHoursText: mapContextMenu.sourceOpeningHoursText,
                   }, 'poi')
                 : createCustomLocation({
                     name: mapContextMenu.sourceName || `Map Pin (${mapContextMenu.lat.toFixed(4)}, ${mapContextMenu.lng.toFixed(4)})`,
@@ -462,6 +521,11 @@ function App() {
             onAddLocation={addLocationToTrip}
             onRemoveLocation={removeLocationFromTrip}
             onOptimize={handleOptimize}
+            optimizerMode={optimizerMode}
+            onOptimizerModeChange={setOptimizerMode}
+            timeBudgetMinutes={timeBudgetMinutes}
+            onTimeBudgetMinutesChange={setTimeBudgetMinutes}
+            onUpdateLocationPriority={updateTripLocationPriority}
             routeEstimate={routeEstimate}
             pois={pois}
             customNodes={customNodes}

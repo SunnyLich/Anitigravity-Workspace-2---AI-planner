@@ -132,6 +132,11 @@ const TripFormWindow = ({
     onAddLocation,
     onRemoveLocation,
     onOptimize,
+    optimizerMode,
+    onOptimizerModeChange,
+    timeBudgetMinutes,
+    onTimeBudgetMinutesChange,
+    onUpdateLocationPriority,
     onMinimize,
     routeEstimate,
     pois,
@@ -282,6 +287,48 @@ const TripFormWindow = ({
                     </div>
                 </div>
 
+                <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Optimization Mode</label>
+                    <div className="flex bg-bg-deep p-1 rounded-xl border border-border-glass gap-1">
+                        <button
+                            onClick={() => onOptimizerModeChange('shortest-feasible')}
+                            className={`flex-1 py-2 rounded-lg text-[11px] font-bold transition-all border ${optimizerMode === 'shortest-feasible'
+                                ? 'bg-primary text-white border-primary'
+                                : 'hover:bg-white/5 text-text-muted border-transparent'
+                                }`}
+                        >
+                            Shortest Feasible
+                        </button>
+                        <button
+                            onClick={() => onOptimizerModeChange('max-priority-budget')}
+                            className={`flex-1 py-2 rounded-lg text-[11px] font-bold transition-all border ${optimizerMode === 'max-priority-budget'
+                                ? 'bg-primary text-white border-primary'
+                                : 'hover:bg-white/5 text-text-muted border-transparent'
+                                }`}
+                        >
+                            Most Wanted In Time
+                        </button>
+                    </div>
+                </div>
+
+                {optimizerMode === 'max-priority-budget' && (
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Time Budget (minutes)</label>
+                        <input
+                            type="number"
+                            min={30}
+                            max={1440}
+                            step={15}
+                            value={timeBudgetMinutes}
+                            onChange={(e) => {
+                                const next = Math.min(1440, Math.max(30, Math.round(Number(e.target.value) || 30)));
+                                onTimeBudgetMinutesChange(next);
+                            }}
+                            className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                        />
+                    </div>
+                )}
+
                 <div className="relative">
                     <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2 block">Search Sights</label>
                     <div className="relative">
@@ -328,6 +375,20 @@ const TripFormWindow = ({
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold truncate" title={loc.name}>{loc.name}</p>
                                         {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
+                                        {optimizerMode === 'max-priority-budget' && (
+                                            <div className="mt-2 flex items-center gap-2">
+                                                <label className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Priority</label>
+                                                <select
+                                                    value={Math.min(5, Math.max(1, Number(loc.priority) || 1))}
+                                                    onChange={(e) => onUpdateLocationPriority(loc.id, Number(e.target.value))}
+                                                    className="bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold outline-none"
+                                                >
+                                                    {[1, 2, 3, 4, 5].map((value) => (
+                                                        <option key={`${loc.id}-priority-${value}`} value={value}>{value}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="shrink-0 flex items-center gap-1">
                                         <button
@@ -402,12 +463,18 @@ const TripFormWindow = ({
                 </div>
 
                 <button
-                    onClick={() => onOptimize(locations, travelMethod, tripDate)}
+                    onClick={() => onOptimize({
+                        locations,
+                        travelMethod,
+                        tripDate,
+                        optimizerMode,
+                        timeBudgetMinutes,
+                    })}
                     disabled={locations.length < 2}
                     className="w-full bg-primary hover:bg-primary-hover py-3.5 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                     <Calendar size={16} />
-                    Optimize Schedule
+                    {optimizerMode === 'max-priority-budget' ? 'Optimize By Priority' : 'Optimize Schedule'}
                 </button>
 
                 <div className="space-y-2">

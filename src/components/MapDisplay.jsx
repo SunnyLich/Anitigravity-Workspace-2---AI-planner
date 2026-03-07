@@ -169,6 +169,8 @@ const MapDisplay = ({
                                     sourceType: 'poi',
                                     sourceId: poi.id,
                                     sourceName: poi.name || 'POI',
+                                    sourceOpeningHours: poi.openingHours || null,
+                                    sourceOpeningHoursText: poi.hours || poi.opening_hours || poi.openingHoursText || '',
                                 });
                             },
                         }}
