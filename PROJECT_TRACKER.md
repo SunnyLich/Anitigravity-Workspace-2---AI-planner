@@ -306,20 +306,26 @@ Goal: add a second optimizer mode that selects and orders stops to maximize user
 ### 11.1 Product behavior
 1. User chooses optimization mode:
    - `Shortest Feasible Route` (existing behavior), or
-   - `Most Important Places In Time Limit` (new behavior).
-2. User sets total available time (example: 4h, 6h, 8h).
+   - `Time-Constrained Fit` (new behavior).
+2. In `TripFormWindow`, mode selector is placed above `Trip Date`, mirroring the travel method selector style.
+3. In `Time-Constrained Fit` mode, user sets a full trip window using start/end **date + time** (example: Oct 10, 10:00 → Oct 13, 17:00), instead of only a generic budget.
+4. User also sets daily availability hours (`wakeTime` and `sleepTime`) so scheduling only uses the hours they are actually active each day.
+5. User enters visit time per location (minutes) and user priority per location as required fields for this mode.
 3. Optimizer returns:
    - selected stops (scheduled),
    - dropped stops (not scheduled) with reasons,
-   - summary score and budget usage.
+   - summary score and timeframe usage.
 
 ### 11.2 New input model
 1. Add per-location fields:
-   - `priority`: integer 1-5 (default 3),
+   - `userPriority`: integer 1-5 set by the user for each stop (required in `Time-Constrained Fit`; default 3 until edited),
    - `required`: boolean (optional; hard include when feasible),
+   - `visitDurationMinutes`: required numeric input in `Time-Constrained Fit` mode,
    - `flexibleDuration`: optional min/max visit duration for future tuning.
 2. Add run-level options:
-   - `timeBudgetMinutes`,
+   - `tripStartTime`,
+   - `tripEndTime`,
+   - derived `timeBudgetMinutes = tripEndTime - tripStartTime`,
    - `maxOverrunMinutes` (default 0 for strict budget),
    - `priorityWeights` (optional advanced config).
 
@@ -353,9 +359,11 @@ Goal: add a second optimizer mode that selects and orders stops to maximize user
 
 ### 11.6 UI updates
 1. Trip Form:
-   - add mode selector,
-   - add time budget input,
-   - add quick priority controls per location (1-5 stars).
+   - add mode selector above `Trip Date`,
+   - keep selector visual treatment parallel to travel method selector,
+   - in `Time-Constrained Fit` mode show `Trip Start Time` + `Trip End Time`,
+   - require per-location `Visit Duration (min)` input,
+   - require per-location `User Priority` controls (1-5) with a clear label that this drives selection order under time limits.
 2. Itinerary:
    - show budget bar (used vs total),
    - show dropped list with reasons,

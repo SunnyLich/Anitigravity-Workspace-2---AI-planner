@@ -29,6 +29,18 @@ export class TSPSolver {
         return Math.round((distance / this.travelSpeed) * 60); // returns whole minutes
     }
 
+    getTimeframeBudgetMinutes(startTime, endTime, fallbackMinutes = 240) {
+        const start = this.timeToMinutes(startTime);
+        const end = this.timeToMinutes(endTime);
+
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) {
+            return Math.max(1, Math.round(Number(fallbackMinutes) || 240));
+        }
+
+        if (end > start) return end - start;
+        return (end + 1440) - start;
+    }
+
     timeToMinutes(timeStr) {
         const [h, m] = timeStr.split(':').map(Number);
         return h * 60 + m;
@@ -193,7 +205,7 @@ export class TSPSolver {
     solveMaxPriorityWithinBudget(timeBudgetMinutes = 240) {
         if (this.locations.length === 0) return [];
 
-        const budgetLimit = Math.min(24 * 60, Math.max(30, Math.round(Number(timeBudgetMinutes) || 240)));
+        const budgetLimit = Math.max(1, Math.round(Number(timeBudgetMinutes) || 240));
 
         let unvisited = [...this.locations];
         let currentPos = unvisited.shift();
@@ -275,6 +287,13 @@ export class TSPSolver {
 
     solve(options = {}) {
         const mode = options?.mode || 'shortest-feasible';
+        const startTime = options?.tripStartTime || this.startTime;
+        this.startTime = startTime;
+
+        if (mode === 'time-constrained-fit') {
+            const budget = this.getTimeframeBudgetMinutes(options?.tripStartTime, options?.tripEndTime, options?.timeBudgetMinutes);
+            return this.solveMaxPriorityWithinBudget(budget);
+        }
 
         if (mode === 'max-priority-budget') {
             return this.solveMaxPriorityWithinBudget(options?.timeBudgetMinutes);

@@ -226,7 +226,7 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
             <div className="space-y-4">
                 <div className="glass-card py-2 px-3">
                     <div className="flex items-center gap-4">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Date</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Date:</span>
                         <span className="text-xs font-bold">{formatTripDate(tripDate)}</span>
                         <span className="text-[10px] font-black uppercase tracking-wider text-primary/90">
                             {totalDays > 1 ? `${totalDays} days` : '1 day'}
@@ -239,7 +239,7 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                         <Download size={14} /> JPG
                     </button>
                     <button onClick={exportPDF} className="flex-1 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-xs font-bold transition-all border border-border-glass">
-                        <Share2 size={14} /> PDF
+                        <Download size={14} /> PDF
                     </button>
                 </div>
 
@@ -272,8 +272,8 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                         </div>
                                         <h4 className="font-bold text-sm truncate">{item.name.split(',')[0]}</h4>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1">
+                                    <div className="flex flex-wrap items-center gap-2 " >
+                                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 mr-1">
                                             <Clock size={10} />
                                             Time
                                         </span>
@@ -284,12 +284,12 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                             onClick={openNativeTimePicker}
                                             onFocus={openNativeTimePicker}
                                             step={900}
-                                            className="bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold"
+                                            className="w-[100px] bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold"
                                         />
                                         <span className="text-[10px] font-black text-text-muted">
-                                            D{toDayOffset(absoluteTimeline[idx]?.arrivalAbs ?? 0) + 1}
+                                            Day {toDayOffset(absoluteTimeline[idx]?.arrivalAbs ?? 0) + 1}
                                         </span>
-                                        <span className="text-[10px] text-text-muted font-bold">to</span>
+                                        <span className="text-[10px] text-text-muted font-bold"> to </span>
                                         <input
                                             type="time"
                                             value={minutesToTime(absoluteTimeline[idx]?.departureAbs ?? timeToMinutes(item.departureTime) ?? 0)}
@@ -300,7 +300,7 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                             className="bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold"
                                         />
                                         <span className="text-[10px] font-black text-text-muted">
-                                            D{toDayOffset(absoluteTimeline[idx]?.departureAbs ?? 0) + 1}
+                                            Day  {toDayOffset(absoluteTimeline[idx]?.departureAbs ?? 0) + 1}
                                         </span>
                                         {item.waitTime > 0 && (
                                             <span className="bg-warning/10 text-warning px-2 py-0.5 rounded-md text-[10px] font-black">

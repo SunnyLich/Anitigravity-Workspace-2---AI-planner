@@ -14,8 +14,96 @@ const SELECTED_ENDPOINTS_STORAGE_KEY = 'tripoptimizer.selectedEndpoints';
 const TRAVEL_METHOD_STORAGE_KEY = 'tripoptimizer.travelMethod';
 const OPTIMIZER_MODE_STORAGE_KEY = 'tripoptimizer.optimizerMode';
 const TIME_BUDGET_STORAGE_KEY = 'tripoptimizer.timeBudgetMinutes';
+const TRIP_START_TIME_STORAGE_KEY = 'tripoptimizer.tripStartTime';
+const TRIP_END_TIME_STORAGE_KEY = 'tripoptimizer.tripEndTime';
+const TRIP_START_DATE_STORAGE_KEY = 'tripoptimizer.tripStartDate';
+const TRIP_END_DATE_STORAGE_KEY = 'tripoptimizer.tripEndDate';
+const WAKE_TIME_STORAGE_KEY = 'tripoptimizer.wakeTime';
+const SLEEP_TIME_STORAGE_KEY = 'tripoptimizer.sleepTime';
 
 const LOCATION_KEY_PRECISION = 5;
+const TIME_INPUT_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+const combineDateTime = (dateValue, timeValue) => {
+  if (!dateValue || !TIME_INPUT_REGEX.test(String(timeValue || ''))) return null;
+  const parsed = new Date(`${dateValue}T${timeValue}:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const computeConstrainedMinutes = ({ tripStartDate, tripStartTime, tripEndDate, tripEndTime, wakeTime, sleepTime }) => {
+  const rangeStart = combineDateTime(tripStartDate, tripStartTime);
+  const rangeEnd = combineDateTime(tripEndDate, tripEndTime);
+
+  if (!rangeStart || !rangeEnd || rangeEnd <= rangeStart) {
+    return { isValid: false, totalMinutes: 0 };
+  }
+
+  if (!TIME_INPUT_REGEX.test(String(wakeTime || '')) || !TIME_INPUT_REGEX.test(String(sleepTime || ''))) {
+    return { isValid: false, totalMinutes: 0 };
+  }
+
+  const [wakeHour, wakeMinute] = wakeTime.split(':').map(Number);
+  const [sleepHour, sleepMinute] = sleepTime.split(':').map(Number);
+  const wakeMinutes = (wakeHour * 60) + wakeMinute;
+  const sleepMinutes = (sleepHour * 60) + sleepMinute;
+
+  if (wakeMinutes === sleepMinutes) {
+    return { isValid: false, totalMinutes: 0 };
+  }
+
+  const dayCursor = new Date(rangeStart);
+  dayCursor.setHours(0, 0, 0, 0);
+
+  const rangeEndDay = new Date(rangeEnd);
+  rangeEndDay.setHours(0, 0, 0, 0);
+
+  let totalMinutes = 0;
+
+  while (dayCursor <= rangeEndDay) {
+    const dayStart = new Date(dayCursor);
+    const nextDayStart = new Date(dayCursor);
+    nextDayStart.setDate(nextDayStart.getDate() + 1);
+
+    const windows = [];
+
+    if (wakeMinutes < sleepMinutes) {
+      const activeStart = new Date(dayStart);
+      activeStart.setMinutes(wakeMinutes);
+      const activeEnd = new Date(dayStart);
+      activeEnd.setMinutes(sleepMinutes);
+      windows.push([activeStart, activeEnd]);
+    } else {
+      const lateStart = new Date(dayStart);
+      lateStart.setMinutes(wakeMinutes);
+      windows.push([lateStart, nextDayStart]);
+
+      const earlyEnd = new Date(dayStart);
+      earlyEnd.setMinutes(sleepMinutes);
+      windows.push([dayStart, earlyEnd]);
+    }
+
+    for (const [windowStart, windowEnd] of windows) {
+      const effectiveStart = windowStart > rangeStart ? windowStart : rangeStart;
+      const effectiveEnd = windowEnd < rangeEnd ? windowEnd : rangeEnd;
+      const minutes = Math.max(0, Math.round((effectiveEnd.getTime() - effectiveStart.getTime()) / 60000));
+      totalMinutes += minutes;
+    }
+
+    dayCursor.setDate(dayCursor.getDate() + 1);
+  }
+
+  return {
+    isValid: totalMinutes > 0,
+    totalMinutes,
+  };
+};
+
+const toMinutes = (timeValue) => {
+  const [h, m] = String(timeValue || '').split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  return (h * 60) + m;
+};
 
 const toLocationKey = (location) => {
   const name = String(location?.name || '').trim().toLowerCase();
@@ -30,11 +118,19 @@ const toLocationKey = (location) => {
 };
 
 function App() {
+  const today = new Date().toISOString().split('T')[0];
+
   const [locations, setLocations] = useState([]);
   const [itinerary, setItinerary] = useState([]);
   const [travelMethod, setTravelMethod] = useState('walk');
   const [itineraryTravelMethod, setItineraryTravelMethod] = useState('walk');
-  const [tripDate, setTripDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [tripDate, setTripDate] = useState(() => today);
+  const [tripStartDate, setTripStartDate] = useState(() => today);
+  const [tripEndDate, setTripEndDate] = useState(() => today);
+  const [tripStartTime, setTripStartTime] = useState('09:00');
+  const [tripEndTime, setTripEndTime] = useState('17:00');
+  const [wakeTime, setWakeTime] = useState('07:00');
+  const [sleepTime, setSleepTime] = useState('23:00');
   const [optimizerMode, setOptimizerMode] = useState('shortest-feasible');
   const [timeBudgetMinutes, setTimeBudgetMinutes] = useState(240);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -108,6 +204,12 @@ function App() {
       const rawEndpoints = localStorage.getItem(SELECTED_ENDPOINTS_STORAGE_KEY);
       const rawOptimizerMode = localStorage.getItem(OPTIMIZER_MODE_STORAGE_KEY);
       const rawTimeBudgetMinutes = localStorage.getItem(TIME_BUDGET_STORAGE_KEY);
+      const rawTripStartTime = localStorage.getItem(TRIP_START_TIME_STORAGE_KEY);
+      const rawTripEndTime = localStorage.getItem(TRIP_END_TIME_STORAGE_KEY);
+      const rawTripStartDate = localStorage.getItem(TRIP_START_DATE_STORAGE_KEY);
+      const rawTripEndDate = localStorage.getItem(TRIP_END_DATE_STORAGE_KEY);
+      const rawWakeTime = localStorage.getItem(WAKE_TIME_STORAGE_KEY);
+      const rawSleepTime = localStorage.getItem(SLEEP_TIME_STORAGE_KEY);
 
       if (rawLocations) {
         const parsedLocations = JSON.parse(rawLocations);
@@ -121,13 +223,37 @@ function App() {
         setTravelMethod(rawTravelMethod);
       }
 
-      if (rawOptimizerMode && ['shortest-feasible', 'max-priority-budget'].includes(rawOptimizerMode)) {
-        setOptimizerMode(rawOptimizerMode);
+      if (rawOptimizerMode && ['shortest-feasible', 'max-priority-budget', 'time-constrained-fit'].includes(rawOptimizerMode)) {
+        setOptimizerMode(rawOptimizerMode === 'max-priority-budget' ? 'time-constrained-fit' : rawOptimizerMode);
       }
 
       if (Number.isFinite(Number(rawTimeBudgetMinutes))) {
         const parsedBudget = Math.round(Number(rawTimeBudgetMinutes));
         setTimeBudgetMinutes(Math.min(24 * 60, Math.max(30, parsedBudget)));
+      }
+
+      if (TIME_INPUT_REGEX.test(String(rawTripStartTime || ''))) {
+        setTripStartTime(String(rawTripStartTime));
+      }
+
+      if (TIME_INPUT_REGEX.test(String(rawTripEndTime || ''))) {
+        setTripEndTime(String(rawTripEndTime));
+      }
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(rawTripStartDate || ''))) {
+        setTripStartDate(String(rawTripStartDate));
+      }
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(rawTripEndDate || ''))) {
+        setTripEndDate(String(rawTripEndDate));
+      }
+
+      if (TIME_INPUT_REGEX.test(String(rawWakeTime || ''))) {
+        setWakeTime(String(rawWakeTime));
+      }
+
+      if (TIME_INPUT_REGEX.test(String(rawSleepTime || ''))) {
+        setSleepTime(String(rawSleepTime));
       }
 
       if (rawEndpoints) {
@@ -171,6 +297,54 @@ function App() {
       console.warn('Could not save time budget:', error);
     }
   }, [timeBudgetMinutes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TRIP_START_TIME_STORAGE_KEY, tripStartTime);
+    } catch (error) {
+      console.warn('Could not save trip start time:', error);
+    }
+  }, [tripStartTime]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TRIP_END_TIME_STORAGE_KEY, tripEndTime);
+    } catch (error) {
+      console.warn('Could not save trip end time:', error);
+    }
+  }, [tripEndTime]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TRIP_START_DATE_STORAGE_KEY, tripStartDate);
+    } catch (error) {
+      console.warn('Could not save trip start date:', error);
+    }
+  }, [tripStartDate]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TRIP_END_DATE_STORAGE_KEY, tripEndDate);
+    } catch (error) {
+      console.warn('Could not save trip end date:', error);
+    }
+  }, [tripEndDate]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(WAKE_TIME_STORAGE_KEY, wakeTime);
+    } catch (error) {
+      console.warn('Could not save wake time:', error);
+    }
+  }, [wakeTime]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SLEEP_TIME_STORAGE_KEY, sleepTime);
+    } catch (error) {
+      console.warn('Could not save sleep time:', error);
+    }
+  }, [sleepTime]);
 
   useEffect(() => {
     try {
@@ -245,6 +419,15 @@ function App() {
     )));
   };
 
+  const updateTripLocationDuration = (locationId, durationValue) => {
+    const normalizedDuration = Math.min(360, Math.max(5, Math.round(Number(durationValue) || 60)));
+    setLocations((prev) => prev.map((item) => (
+      item.id === locationId
+        ? { ...item, duration: normalizedDuration }
+        : item
+    )));
+  };
+
   const updateCustomNode = (locationId, updates) => {
     setCustomNodes(prev =>
       prev.map(item => {
@@ -269,14 +452,51 @@ function App() {
     const method = Array.isArray(payload) ? fallbackMethod : payload?.travelMethod;
     const date = Array.isArray(payload) ? fallbackDate : payload?.tripDate;
     const mode = Array.isArray(payload) ? optimizerMode : (payload?.optimizerMode || optimizerMode);
-    const budget = Array.isArray(payload)
+    const requestedStartTime = Array.isArray(payload)
+      ? tripStartTime
+      : (payload?.tripStartTime || tripStartTime);
+    const requestedEndTime = Array.isArray(payload)
+      ? tripEndTime
+      : (payload?.tripEndTime || tripEndTime);
+    const requestedStartDate = Array.isArray(payload)
+      ? tripStartDate
+      : (payload?.tripStartDate || tripStartDate);
+    const requestedEndDate = Array.isArray(payload)
+      ? tripEndDate
+      : (payload?.tripEndDate || tripEndDate);
+    const requestedWakeTime = Array.isArray(payload)
+      ? wakeTime
+      : (payload?.wakeTime || wakeTime);
+    const requestedSleepTime = Array.isArray(payload)
+      ? sleepTime
+      : (payload?.sleepTime || sleepTime);
+
+    const explicitBudget = Array.isArray(payload)
       ? timeBudgetMinutes
       : Math.min(24 * 60, Math.max(30, Math.round(Number(payload?.timeBudgetMinutes) || timeBudgetMinutes)));
+
+    const constrainedBudget = computeConstrainedMinutes({
+      tripStartDate: requestedStartDate,
+      tripStartTime: requestedStartTime,
+      tripEndDate: requestedEndDate,
+      tripEndTime: requestedEndTime,
+      wakeTime: requestedWakeTime,
+      sleepTime: requestedSleepTime,
+    });
+    const budget = mode === 'time-constrained-fit'
+      ? Math.max(1, Math.round(Number(constrainedBudget.totalMinutes) || explicitBudget))
+      : explicitBudget;
 
     setIsOptimizing(true);
     setTravelMethod(method);
     setItineraryTravelMethod(method);
     if (date) setTripDate(date);
+    if (requestedStartDate) setTripStartDate(requestedStartDate);
+    if (requestedEndDate) setTripEndDate(requestedEndDate);
+    if (requestedStartTime) setTripStartTime(requestedStartTime);
+    if (requestedEndTime) setTripEndTime(requestedEndTime);
+    if (requestedWakeTime) setWakeTime(requestedWakeTime);
+    if (requestedSleepTime) setSleepTime(requestedSleepTime);
     if (mode) setOptimizerMode(mode);
     if (Number.isFinite(budget)) setTimeBudgetMinutes(budget);
     setRouteEstimate(null);
@@ -285,13 +505,17 @@ function App() {
       const solver = new TSPSolver(runLocations, {
         travelSpeed: method === 'car' ? 40 : method === 'transit' ? 20 : 5,
         bufferTime: 15,
-        startTime: "09:00"
+        startTime: requestedStartTime || '09:00'
       });
 
       try {
         const result = solver.solve({
           mode,
           timeBudgetMinutes: budget,
+          tripStartDate: requestedStartDate,
+          tripEndDate: requestedEndDate,
+          tripStartTime: requestedStartTime,
+          tripEndTime: requestedEndTime,
         });
         setItinerary(result);
         setWindows(prev => ({ ...prev, itinerary: true }));
@@ -526,6 +750,7 @@ function App() {
             timeBudgetMinutes={timeBudgetMinutes}
             onTimeBudgetMinutesChange={setTimeBudgetMinutes}
             onUpdateLocationPriority={updateTripLocationPriority}
+            onUpdateLocationDuration={updateTripLocationDuration}
             routeEstimate={routeEstimate}
             pois={pois}
             customNodes={customNodes}
@@ -539,6 +764,18 @@ function App() {
             isLocationSaved={isLocationSaved}
             tripDate={tripDate}
             onTripDateChange={setTripDate}
+            tripStartDate={tripStartDate}
+            tripEndDate={tripEndDate}
+            tripStartTime={tripStartTime}
+            tripEndTime={tripEndTime}
+            wakeTime={wakeTime}
+            sleepTime={sleepTime}
+            onTripStartDateChange={setTripStartDate}
+            onTripEndDateChange={setTripEndDate}
+            onTripStartTimeChange={setTripStartTime}
+            onTripEndTimeChange={setTripEndTime}
+            onWakeTimeChange={setWakeTime}
+            onSleepTimeChange={setSleepTime}
           />
 
           <ItineraryWindow

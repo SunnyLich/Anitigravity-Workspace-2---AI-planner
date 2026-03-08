@@ -98,6 +98,66 @@ const formatCoordinate = (value) => {
     return number.toFixed(5);
 };
 
+const toMinutes = (timeValue) => {
+    const [h, m] = String(timeValue || '').split(':').map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    return (h * 60) + m;
+};
+
+const combineDateTime = (dateValue, timeValue) => {
+    if (!dateValue || !timeValue) return null;
+    const parsed = new Date(`${dateValue}T${timeValue}:00`);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+};
+
+const computeConstrainedMinutes = ({ tripStartDate, tripStartTime, tripEndDate, tripEndTime, wakeTime, sleepTime }) => {
+    const rangeStart = combineDateTime(tripStartDate, tripStartTime);
+    const rangeEnd = combineDateTime(tripEndDate, tripEndTime);
+
+    if (!rangeStart || !rangeEnd || rangeEnd <= rangeStart) {
+        return { valid: false, totalMinutes: 0 };
+    }
+
+    const wakeMinutes = toMinutes(wakeTime);
+    const sleepMinutes = toMinutes(sleepTime);
+    if (!Number.isFinite(wakeMinutes) || !Number.isFinite(sleepMinutes) || wakeMinutes === sleepMinutes) {
+        return { valid: false, totalMinutes: 0 };
+    }
+
+    const cursor = new Date(rangeStart);
+    cursor.setHours(0, 0, 0, 0);
+    const endDay = new Date(rangeEnd);
+    endDay.setHours(0, 0, 0, 0);
+
+    let totalMinutes = 0;
+
+    while (cursor <= endDay) {
+        const dayStart = new Date(cursor);
+        const nextDay = new Date(cursor);
+        nextDay.setDate(nextDay.getDate() + 1);
+
+        const windows = wakeMinutes < sleepMinutes
+            ? [
+                [new Date(dayStart.getTime() + wakeMinutes * 60000), new Date(dayStart.getTime() + sleepMinutes * 60000)],
+            ]
+            : [
+                [new Date(dayStart.getTime() + wakeMinutes * 60000), nextDay],
+                [dayStart, new Date(dayStart.getTime() + sleepMinutes * 60000)],
+            ];
+
+        windows.forEach(([windowStart, windowEnd]) => {
+            const effectiveStart = windowStart > rangeStart ? windowStart : rangeStart;
+            const effectiveEnd = windowEnd < rangeEnd ? windowEnd : rangeEnd;
+            totalMinutes += Math.max(0, Math.round((effectiveEnd.getTime() - effectiveStart.getTime()) / 60000));
+        });
+
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return { valid: totalMinutes > 0, totalMinutes };
+};
+
 const scoreSearchResult = (location, query) => {
     const normalizedQuery = String(query || '').toLowerCase().trim();
     const name = String(location?.name || '').toLowerCase();
@@ -137,6 +197,7 @@ const TripFormWindow = ({
     timeBudgetMinutes,
     onTimeBudgetMinutesChange,
     onUpdateLocationPriority,
+    onUpdateLocationDuration,
     onMinimize,
     routeEstimate,
     pois,
@@ -151,6 +212,18 @@ const TripFormWindow = ({
     isLocationSaved,
     tripDate,
     onTripDateChange,
+    tripStartDate,
+    tripEndDate,
+    tripStartTime,
+    tripEndTime,
+    wakeTime,
+    sleepTime,
+    onTripStartDateChange,
+    onTripEndDateChange,
+    onTripStartTimeChange,
+    onTripEndTimeChange,
+    onWakeTimeChange,
+    onSleepTimeChange,
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
@@ -172,6 +245,21 @@ const TripFormWindow = ({
         () => buildLocalSearchIndex({ pois, customNodes }),
         [pois, customNodes]
     );
+
+    const isTimeConstrainedMode = optimizerMode === 'time-constrained-fit';
+    const timeframe = useMemo(() => {
+        if (!isTimeConstrainedMode) return 0;
+        return computeConstrainedMinutes({
+            tripStartDate,
+            tripStartTime,
+            tripEndDate,
+            tripEndTime,
+            wakeTime,
+            sleepTime,
+        });
+    }, [isTimeConstrainedMode, tripStartDate, tripStartTime, tripEndDate, tripEndTime, wakeTime, sleepTime]);
+    const timeframeMinutes = isTimeConstrainedMode ? timeframe.totalMinutes : 0;
+    const hasValidTimeframe = !isTimeConstrainedMode || timeframe.valid;
 
     if (!isOpen) return null;
 
@@ -241,17 +329,113 @@ const TripFormWindow = ({
         >
             <div className="space-y-5">
                 <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Trip Date</label>
-                    <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-                        <input
-                            type="date"
-                            value={tripDate}
-                            onChange={(e) => onTripDateChange(e.target.value)}
-                            className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                        />
+                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Optimization Mode</label>
+                    <div className="flex bg-bg-deep p-1 rounded-xl border border-border-glass">
+                        {[
+                            { key: 'shortest-feasible', label: 'Current Mode' },
+                            { key: 'time-constrained-fit', label: 'Time Constrained' },
+                        ].map((mode) => (
+                            <button
+                                key={mode.key}
+                                onClick={() => onOptimizerModeChange(mode.key)}
+                                className={`flex-1 flex items-center justify-center py-2 rounded-lg transition-all border ${optimizerMode === mode.key
+                                    ? 'bg-primary text-white shadow-lg border-primary ring-2 ring-primary/40 scale-[1.02]'
+                                    : 'hover:bg-white/5 text-text-muted border-transparent'
+                                    }`}
+                                style={optimizerMode === mode.key
+                                    ? {
+                                        backgroundColor: 'var(--primary)',
+                                        color: '#ffffff',
+                                        borderColor: 'var(--primary)',
+                                        boxShadow: '0 0 0 2px rgba(99,102,241,0.45), 0 6px 16px rgba(99,102,241,0.35)',
+                                        fontWeight: 800,
+                                    }
+                                    : {
+                                        color: 'var(--text-muted)',
+                                        borderColor: 'transparent',
+                                    }
+                                }
+                            >
+                                <span className="text-xs font-bold">{mode.label}</span>
+                            </button>
+                        ))}
                     </div>
                 </div>
+
+                {!isTimeConstrainedMode && (
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Trip Date</label>
+                        <div className="relative">
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+                            <input
+                                type="date"
+                                value={tripDate}
+                                onChange={(e) => onTripDateChange(e.target.value)}
+                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {isTimeConstrainedMode && (
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Trip Timeframe</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <input
+                                type="date"
+                                value={tripStartDate}
+                                onChange={(e) => onTripStartDateChange(e.target.value)}
+                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                aria-label="Trip start date"
+                            />
+                            <input
+                                type="date"
+                                value={tripEndDate}
+                                onChange={(e) => onTripEndDateChange(e.target.value)}
+                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                aria-label="Trip end date"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <input
+                                type="time"
+                                value={tripStartTime}
+                                onChange={(e) => onTripStartTimeChange(e.target.value)}
+                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                aria-label="Trip start time"
+                            />
+                            <input
+                                type="time"
+                                value={tripEndTime}
+                                onChange={(e) => onTripEndTimeChange(e.target.value)}
+                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                aria-label="Trip end time"
+                            />
+                        </div>
+                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Daily Availability</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <input
+                                type="time"
+                                value={wakeTime}
+                                onChange={(e) => onWakeTimeChange(e.target.value)}
+                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                aria-label="Wake time"
+                            />
+                            <input
+                                type="time"
+                                value={sleepTime}
+                                onChange={(e) => onSleepTimeChange(e.target.value)}
+                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                aria-label="Sleep time"
+                            />
+                        </div>
+                        <p className={`text-[11px] ${hasValidTimeframe ? 'text-text-muted' : 'text-accent font-bold'}`}>
+                            {hasValidTimeframe
+                                ? `Available planning time: ${timeframeMinutes} minutes (within wake-to-sleep windows)`
+                                : 'Set a valid multi-day range and daily wake/sleep window'}
+                        </p>
+                    </div>
+                )}
 
                 <div className="space-y-2">
                     <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Travel Method</label>
@@ -284,30 +468,6 @@ const TripFormWindow = ({
                                 <span className="ml-2 text-xs font-bold capitalize">{m}</span>
                             </button>
                         ))}
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Optimization Mode</label>
-                    <div className="flex bg-bg-deep p-1 rounded-xl border border-border-glass gap-1">
-                        <button
-                            onClick={() => onOptimizerModeChange('shortest-feasible')}
-                            className={`flex-1 py-2 rounded-lg text-[11px] font-bold transition-all border ${optimizerMode === 'shortest-feasible'
-                                ? 'bg-primary text-white border-primary'
-                                : 'hover:bg-white/5 text-text-muted border-transparent'
-                                }`}
-                        >
-                            Shortest Feasible
-                        </button>
-                        <button
-                            onClick={() => onOptimizerModeChange('max-priority-budget')}
-                            className={`flex-1 py-2 rounded-lg text-[11px] font-bold transition-all border ${optimizerMode === 'max-priority-budget'
-                                ? 'bg-primary text-white border-primary'
-                                : 'hover:bg-white/5 text-text-muted border-transparent'
-                                }`}
-                        >
-                            Most Wanted In Time
-                        </button>
                     </div>
                 </div>
 
@@ -375,11 +535,23 @@ const TripFormWindow = ({
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold truncate" title={loc.name}>{loc.name}</p>
                                         {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
-                                        {optimizerMode === 'max-priority-budget' && (
+                                        {isTimeConstrainedMode && (
                                             <div className="mt-2 flex items-center gap-2">
+                                                <label className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Duration(min)</label>
+                                                <input
+                                                    type="number"
+                                                    min={5}
+                                                    max={360}
+                                                    step={5}
+                                                    value={Math.min(360, Math.max(5, Math.round(Number(loc.duration) || 60)))}
+                                                    onChange={(e) => onUpdateLocationDuration(loc.id, Number(e.target.value))}
+                                                    className="w-[78px] bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold outline-none"
+                                                    aria-label={`Visit duration for ${loc.name}`}
+                                                />
+                                                
                                                 <label className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Priority</label>
                                                 <select
-                                                    value={Math.min(5, Math.max(1, Number(loc.priority) || 1))}
+                                                    value={Math.min(5, Math.max(1, Number(loc.userPriority ?? loc.priority) || 1))}
                                                     onChange={(e) => onUpdateLocationPriority(loc.id, Number(e.target.value))}
                                                     className="bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold outline-none"
                                                 >
@@ -469,12 +641,18 @@ const TripFormWindow = ({
                         tripDate,
                         optimizerMode,
                         timeBudgetMinutes,
+                        tripStartDate,
+                        tripEndDate,
+                        tripStartTime,
+                        tripEndTime,
+                        wakeTime,
+                        sleepTime,
                     })}
-                    disabled={locations.length < 2}
+                    disabled={locations.length < 2 || !hasValidTimeframe}
                     className="w-full bg-primary hover:bg-primary-hover py-3.5 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                     <Calendar size={16} />
-                    {optimizerMode === 'max-priority-budget' ? 'Optimize By Priority' : 'Optimize Schedule'}
+                    {isTimeConstrainedMode ? 'Optimize Time-Constrained Fit' : 'Optimize Schedule'}
                 </button>
 
                 <div className="space-y-2">
