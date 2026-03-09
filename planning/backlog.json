@@ -1,0 +1,153 @@
+{
+  "meta": {
+    "project": "TripOptimizer",
+    "updated": "2026-03-09",
+    "source": "Migrated from PROJECT_TRACKER and PROJECT_TRACKER_SYSTEMATIC"
+  },
+  "items": [
+    {
+      "id": "OH-001",
+      "title": "Implement openingRules compatibility adapter",
+      "workstream": "opening-hours-optimizer",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "Legacy openingHours maps into openingRules",
+        "No regressions in existing saved locations"
+      ]
+    },
+    {
+      "id": "OH-002",
+      "title": "Add feasibility-aware scheduling in TSPSolver",
+      "workstream": "opening-hours-optimizer",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "L",
+      "owner": "unassigned",
+      "acceptance": [
+        "Solver can wait for open windows",
+        "Solver never schedules finishing after close",
+        "Unscheduled stops include statusReason"
+      ]
+    },
+    {
+      "id": "OH-003",
+      "title": "Show wait/closed/unscheduled badges in itinerary UI",
+      "workstream": "opening-hours-optimizer",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "OH-004",
+      "title": "Add trip-form opening-hours editor controls",
+      "workstream": "opening-hours-optimizer",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "PB-001",
+      "title": "Enforce strict budget cap in priority mode",
+      "workstream": "priority-budget-optimizer",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "PB-002",
+      "title": "Improve dropped-stop reason quality",
+      "workstream": "priority-budget-optimizer",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "PB-003",
+      "title": "Add replace-move optimization pass",
+      "workstream": "priority-budget-optimizer",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "L",
+      "owner": "unassigned"
+    },
+    {
+      "id": "TR-001",
+      "title": "Evaluate transit providers for London Ontario",
+      "workstream": "real-transit",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "TR-002",
+      "title": "Define normalized transit response contract",
+      "workstream": "real-transit",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "S",
+      "owner": "unassigned"
+    },
+    {
+      "id": "TR-003",
+      "title": "Implement getTransitRouteEstimate adapter",
+      "workstream": "real-transit",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "TR-004",
+      "title": "Wire transit branch into routing flow",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "ROUTE-001",
+      "title": "Replace mock road fallback with OSRM",
+      "workstream": "routing-quality",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "SEARCH-001",
+      "title": "Add weighted fuzzy scoring for local search",
+      "workstream": "search-quality",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    },
+    {
+      "id": "UX-001",
+      "title": "Improve travel-method active state visibility",
+      "workstream": "planner-ux",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "S",
+      "owner": "unassigned"
+    },
+    {
+      "id": "UX-002",
+      "title": "Add settings/help panel",
+      "workstream": "planner-ux",
+      "priority": "P2",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned"
+    }
+  ]
+}

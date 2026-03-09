@@ -1,0 +1,137 @@
+meta:
+  project: TripOptimizer
+  owner: Team
+  updated: 2026-03-09
+  statusLegend:
+    DONE: Implemented and usable
+    PARTIAL: Foundation exists, incomplete workflow
+    TODO: Not implemented
+
+workstreams:
+  - id: location-model
+    name: Location model normalization
+    status: PARTIAL
+    owner: Team
+    priority: P1
+    notes: Core normalization/dedupe exists in src/utils/locationModel.js; advanced fields pending.
+    milestones:
+      - id: LM1
+        title: Extend schema for opening rules and metadata
+        state: TODO
+      - id: LM2
+        title: Add backward compatibility adapter
+        state: PARTIAL
+  - id: map-context
+    name: Map context actions
+    status: DONE
+    owner: Team
+    priority: P2
+    notes: Start/Destination/Custom creation available.
+  - id: custom-nodes
+    name: Custom nodes workflow
+    status: DONE
+    owner: Team
+    priority: P2
+    notes: Create/use/rename/delete and localStorage persistence implemented.
+  - id: local-search
+    name: Local-first search
+    status: DONE
+    owner: Team
+    priority: P2
+    notes: Indexed local ranking with bounded external fallback.
+  - id: london-search-bias
+    name: London-only search bias
+    status: DONE
+    owner: Team
+    priority: P2
+    notes: External fallback constrained and ranked.
+  - id: endpoint-routing
+    name: Explicit start/destination routing
+    status: DONE
+    owner: Team
+    priority: P2
+    notes: Selector state wired into route estimation.
+  - id: session-persistence
+    name: Session persistence
+    status: DONE
+    owner: Team
+    priority: P2
+    notes: Trip list, method, selected endpoints, and custom nodes restore on refresh.
+  - id: settings-help
+    name: Settings and help UX
+    status: PARTIAL
+    owner: Team
+    priority: P2
+    notes: Documentation exists; in-app settings/help panel missing.
+  - id: opening-hours-optimizer
+    name: Opening-hours-aware optimization
+    status: PARTIAL
+    owner: Team
+    priority: P0
+    notes: Baseline parsing and POI hours preservation done; full feasibility pipeline pending.
+    milestones:
+      - id: OH1
+        title: Data model adapter and time helpers
+        state: TODO
+      - id: OH2
+        title: Feasibility-aware solver output
+        state: TODO
+      - id: OH3
+        title: Itinerary badges and unscheduled section
+        state: TODO
+      - id: OH4
+        title: Trip-form opening-hours editor
+        state: TODO
+      - id: OH5
+        title: Real-data tuning on London POI samples
+        state: TODO
+    definitionOfDone:
+      - Optimizer never schedules visits outside opening windows.
+      - Unschedulable stops are explicit and actionable.
+      - Existing saved locations remain backward-compatible.
+  - id: priority-budget-optimizer
+    name: Max-priority within time budget
+    status: PARTIAL
+    owner: Team
+    priority: P0
+    notes: Mode toggle, budget input, per-location priority controls, and first-pass solver path implemented.
+    milestones:
+      - id: PB1
+        title: Tighten strict budget and opening-window constraints
+        state: TODO
+      - id: PB2
+        title: Improve dropped-stop reasoning quality
+        state: TODO
+      - id: PB3
+        title: Add replace/improvement loop under constraints
+        state: TODO
+    definitionOfDone:
+      - Budget and opening windows are always respected.
+      - Priority score outperforms nearest-neighbor baseline under equal budget.
+      - Existing shortest-feasible mode remains regression-safe.
+  - id: real-transit
+    name: Real transit routing integration
+    status: TODO
+    owner: Team
+    priority: P0
+    notes: Transit currently uses placeholder behavior; requires provider evaluation and adapter integration.
+    milestones:
+      - id: TR1
+        title: Provider comparison and decision
+        state: TODO
+      - id: TR2
+        title: Transit adapter and normalized response model
+        state: TODO
+      - id: TR3
+        title: Integrate transit branch without walk/car regressions
+        state: TODO
+      - id: TR4
+        title: Transit-specific itinerary details in UI
+        state: TODO
+      - id: TR5
+        title: Graceful fallback and unavailable-state messaging
+        state: TODO
+    definitionOfDone:
+      - Transit mode uses schedule-aware provider data in non-mock mode.
+      - Output includes multi-leg path and schedule-aware ETA.
+      - Unavailable scenarios fail gracefully with clear messaging.

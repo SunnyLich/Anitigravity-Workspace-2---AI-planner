@@ -42,3 +42,14 @@ When mock mode is active, route estimates are deterministic simulated outputs so
 
 - Existing itinerary optimization (`TSPSolver`) is still available and separate from point-to-point route estimation.
 - The app no longer depends on local parsed OSM POI data for map overlays.
+
+## Planning docs
+
+- Planning index: `PROJECT_TRACKER_SYSTEMATIC.md`
+- Product roadmap: `docs/roadmap.md`
+- Workstream status (YAML): `planning/workstreams.yaml`
+- Backlog tasks (JSON): `planning/backlog.json`
+- Architecture overview: `docs/architecture.md`
+- Onboarding guide: `docs/onboarding.md`
+- Changelog: `docs/changelog.md`
+- ADRs: `docs/adr/`
