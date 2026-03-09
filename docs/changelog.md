@@ -10,6 +10,11 @@
 - Added in-memory caching and request throttling for reverse geocoding to stay usage-safe.
 - Saved-location rename/edit now syncs to linked trip entries via `linkedCustomNodeId`.
 - Defined a normalized route/transit response contract in `mapboxRouting` for adapter-ready provider integration.
+- Accepted ADR-0001 selecting OpenTripPlanner (OTP2) as the primary transit provider strategy.
+- Implemented `getTransitRouteEstimate` with OTP adapter path, timeout handling, and safe mock fallback.
+- Enhanced `TSPSolver` feasibility handling to enforce opening-window completion and emit unscheduled stops with `statusReason` metadata.
+- Fixed priority-mode solver bias by selecting the initial stop from highest feasible priority instead of first-added order.
+- Fixed priority-mode schedule timing so first-stop arrival includes travel (and wait) from the first-location start anchor when a different stop is seeded first.
 
 ## 2026-03-05
 - Added opening-hours-aware optimization implementation plan.

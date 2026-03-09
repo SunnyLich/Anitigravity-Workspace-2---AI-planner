@@ -23,7 +23,7 @@
       "title": "Add feasibility-aware scheduling in TSPSolver",
       "workstream": "opening-hours-optimizer",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "L",
       "owner": "unassigned",
       "acceptance": [
@@ -82,7 +82,7 @@
       "title": "Evaluate transit providers for London Ontario",
       "workstream": "real-transit",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
       "owner": "unassigned"
     },
@@ -100,7 +100,7 @@
       "title": "Implement getTransitRouteEstimate adapter",
       "workstream": "real-transit",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
       "owner": "unassigned"
     },
@@ -108,7 +108,7 @@
       "id": "TR-004",
       "title": "Wire transit branch into routing flow",
       "workstream": "real-transit",
-      "priority": "P1",
+      "priority": "P2",
       "status": "todo",
       "estimate": "M",
       "owner": "unassigned"
@@ -160,6 +160,32 @@
       "acceptance": [
         "POI right-click add preserves source address",
         "Empty-map context add and saved-location creation reverse geocode full address"
+      ]
+    },
+    {
+      "id": "CF-001",
+      "title": "Fix priority-mode add-order bias",
+      "workstream": "priority-budget-optimizer",
+      "priority": "P0",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Priority solver no longer seeds from first-added location",
+        "Higher-priority feasible location can be selected first"
+      ]
+    },
+    {
+      "id": "CF-002",
+      "title": "Account initial travel before prioritized first stop",
+      "workstream": "priority-budget-optimizer",
+      "priority": "P0",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Priority mode includes travel from first location anchor when another stop is seeded first",
+        "First stop arrival time reflects initial travel and opening-window wait when applicable"
       ]
     }
   ]

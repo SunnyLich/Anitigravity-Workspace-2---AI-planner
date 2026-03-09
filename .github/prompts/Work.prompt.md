@@ -30,14 +30,13 @@ Current focus handling
 
 If the user confirms:
 - Mark the backlog task as `superseded`.
-- Complete the item in `current-focus.md`.
+- Complete and remove the item in `current-focus.md`.
 
 If the user declines:
 - Remove the item from `current-focus.md`.
 - Continue normal backlog workflow.
 
 Maintenance
-
 - Keep the structure of `current-focus.md` even if the problem list is empty.
 
 Workflow

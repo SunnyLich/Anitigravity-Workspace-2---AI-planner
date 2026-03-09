@@ -9,8 +9,6 @@ This file contains temporary priorities defined by the user that override the no
 
 
 
-
-
 <!-- 
 Problem Template
 ### CF-001 Date and icon overlap in itinerary UI

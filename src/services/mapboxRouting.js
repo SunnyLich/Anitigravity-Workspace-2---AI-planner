@@ -4,6 +4,8 @@ const MAPBOX_PROFILE_BY_METHOD = {
   transit: 'driving-traffic',
 };
 
+const OTP_DEFAULT_TIMEOUT_MS = 12000;
+
 /**
  * Normalized route estimate contract used across UI and provider adapters.
  * @typedef {Object} RouteEstimate
@@ -75,6 +77,58 @@ function buildMockRoute(origin, destination, travelMethod) {
   });
 }
 
+function buildMockTransitRoute(origin, destination) {
+  const directKm = haversineDistanceKm(origin, destination);
+  const walkToStopMinutes = Math.max(4, Math.round(directKm * 6));
+  const rideMinutes = Math.max(6, Math.round(directKm * 2.4));
+  const walkFromStopMinutes = Math.max(3, Math.round(directKm * 4));
+  const durationMinutes = walkToStopMinutes + rideMinutes + walkFromStopMinutes;
+
+  const startLat = origin.lat;
+  const startLng = origin.lng;
+  const midLat = (origin.lat + destination.lat) / 2;
+  const midLng = (origin.lng + destination.lng) / 2;
+  const endLat = destination.lat;
+  const endLng = destination.lng;
+
+  return normalizeRouteEstimate({
+    provider: 'mock-transit',
+    travelMethod: 'transit',
+    profile: 'otp-transit',
+    distanceKm: Number((directKm * 1.35).toFixed(2)),
+    durationMinutes,
+    geometry: [
+      [startLat, startLng],
+      [midLat, midLng],
+      [endLat, endLng],
+    ],
+    legs: [
+      {
+        summary: 'Walk to stop',
+        durationMinutes: walkToStopMinutes,
+        distanceKm: Number((directKm * 0.2).toFixed(2)),
+      },
+      {
+        summary: 'Transit ride',
+        durationMinutes: rideMinutes,
+        distanceKm: Number((directKm * 0.95).toFixed(2)),
+      },
+      {
+        summary: 'Walk to destination',
+        durationMinutes: walkFromStopMinutes,
+        distanceKm: Number((directKm * 0.2).toFixed(2)),
+      },
+    ],
+    transitLegs: [
+      { mode: 'WALK', from: 'Origin', to: 'Boarding stop', durationMinutes: walkToStopMinutes },
+      { mode: 'BUS', from: 'Boarding stop', to: 'Alighting stop', durationMinutes: rideMinutes },
+      { mode: 'WALK', from: 'Alighting stop', to: 'Destination', durationMinutes: walkFromStopMinutes },
+    ],
+    isScheduleAware: false,
+    isMock: true,
+  });
+}
+
 function normalizeMapboxRoute(route, travelMethod) {
   return normalizeRouteEstimate({
     provider: 'mapbox',
@@ -91,6 +145,119 @@ function normalizeMapboxRoute(route, travelMethod) {
     isScheduleAware: false,
     isMock: false,
   });
+}
+
+function extractOtpLegMode(leg) {
+  if (leg?.transitLeg) {
+    return String(leg?.route?.gtfsId || leg?.route?.shortName || leg?.mode || 'TRANSIT');
+  }
+  return String(leg?.mode || 'WALK').toUpperCase();
+}
+
+function normalizeOtpItinerary(itinerary) {
+  const legs = Array.isArray(itinerary?.legs) ? itinerary.legs : [];
+  const geometry = legs.flatMap((leg) => {
+    const from = leg?.from;
+    const to = leg?.to;
+    const points = [];
+
+    if (Number.isFinite(Number(from?.lat)) && Number.isFinite(Number(from?.lon))) {
+      points.push([Number(from.lat), Number(from.lon)]);
+    }
+
+    if (Number.isFinite(Number(to?.lat)) && Number.isFinite(Number(to?.lon))) {
+      points.push([Number(to.lat), Number(to.lon)]);
+    }
+
+    return points;
+  });
+
+  const legSummaries = legs.map((leg, index) => {
+    const fromName = String(leg?.from?.name || 'Start').trim();
+    const toName = String(leg?.to?.name || 'End').trim();
+    const mode = String(leg?.mode || (leg?.transitLeg ? 'TRANSIT' : 'WALK')).toUpperCase();
+
+    return {
+      summary: `${mode}: ${fromName} -> ${toName}`,
+      durationMinutes: Math.max(1, Math.round(Number(leg?.duration || 0) / 60)),
+      distanceKm: Number((Number(leg?.distance || 0) / 1000).toFixed(2)),
+    };
+  });
+
+  const transitLegs = legs.map((leg) => ({
+    mode: extractOtpLegMode(leg),
+    from: leg?.from?.name ? String(leg.from.name) : undefined,
+    to: leg?.to?.name ? String(leg.to.name) : undefined,
+    durationMinutes: Math.max(1, Math.round(Number(leg?.duration || 0) / 60)),
+  }));
+
+  return normalizeRouteEstimate({
+    provider: 'otp',
+    travelMethod: 'transit',
+    profile: 'otp-transit',
+    distanceKm: Number((Number(itinerary?.walkDistance || 0) / 1000).toFixed(2)),
+    durationMinutes: Math.max(1, Math.round(Number(itinerary?.duration || 0) / 60)),
+    geometry,
+    legs: legSummaries,
+    transitLegs,
+    isScheduleAware: true,
+    isMock: false,
+  });
+}
+
+export async function getTransitRouteEstimate({ origin, destination, dateTime = new Date().toISOString() }) {
+  if (!origin || !destination) {
+    throw new Error('Origin and destination are required for transit estimation.');
+  }
+
+  const forceMockTransit = import.meta.env.VITE_USE_MOCK_TRANSIT !== 'false';
+  const otpBaseUrl = String(import.meta.env.VITE_OTP_BASE_URL || '').trim();
+  const timeoutMs = Math.max(2000, Number(import.meta.env.VITE_OTP_TIMEOUT_MS || OTP_DEFAULT_TIMEOUT_MS));
+
+  if (forceMockTransit || !otpBaseUrl) {
+    return buildMockTransitRoute(origin, destination);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const params = new URLSearchParams({
+    fromPlace: `${origin.lat},${origin.lng}`,
+    toPlace: `${destination.lat},${destination.lng}`,
+    mode: 'WALK,TRANSIT',
+    numItineraries: '1',
+  });
+
+  if (dateTime) {
+    const parsed = new Date(dateTime);
+    if (!Number.isNaN(parsed.getTime())) {
+      params.set('date', parsed.toISOString().slice(0, 10));
+      params.set('time', parsed.toISOString().slice(11, 19));
+    }
+  }
+
+  const url = `${otpBaseUrl.replace(/\/$/, '')}/routers/default/plan?${params.toString()}`;
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`OTP routing failed (${response.status}).`);
+    }
+
+    const data = await response.json();
+    const itinerary = data?.plan?.itineraries?.[0];
+
+    if (!itinerary) {
+      throw new Error('OTP returned no valid itinerary.');
+    }
+
+    return normalizeOtpItinerary(itinerary);
+  } catch (error) {
+    console.warn('OTP transit routing unavailable, using mock transit fallback:', error);
+    return buildMockTransitRoute(origin, destination);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -148,6 +315,10 @@ function normalizeRouteEstimate(raw) {
 export async function getRouteEstimate({ origin, destination, travelMethod = 'walk' }) {
   if (!origin || !destination) {
     throw new Error('Origin and destination are required for route estimation.');
+  }
+
+  if (travelMethod === 'transit') {
+    return getTransitRouteEstimate({ origin, destination });
   }
 
   const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;

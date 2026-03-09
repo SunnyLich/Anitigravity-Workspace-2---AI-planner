@@ -68,14 +68,14 @@ workstreams:
     status: PARTIAL
     owner: Team
     priority: P0
-    notes: Baseline parsing, POI hours preservation, and openingRules compatibility adapter done; full feasibility pipeline pending.
+    notes: Baseline parsing, compatibility adapter, and feasibility-aware solver output are implemented; UI/editor polishing remains.
     milestones:
       - id: OH1
         title: Data model adapter and time helpers
         state: PARTIAL
       - id: OH2
         title: Feasibility-aware solver output
-        state: TODO
+        state: DONE
       - id: OH3
         title: Itinerary badges and unscheduled section
         state: TODO
@@ -94,7 +94,7 @@ workstreams:
     status: PARTIAL
     owner: Team
     priority: P0
-    notes: Mode toggle, budget input, per-location priority controls, and first-pass solver path implemented.
+    notes: Mode toggle, budget input, per-location priority controls, priority-first seed selection, and initial-travel accounting for seeded-first stops are implemented.
     milestones:
       - id: PB1
         title: Tighten strict budget and opening-window constraints
@@ -113,18 +113,18 @@ workstreams:
     name: Real transit routing integration
     status: PARTIAL
     owner: Team
-    priority: P0
-    notes: Transit response contract is defined; provider evaluation and adapter integration remain.
+    priority: P2
+    notes: Provider selected as OpenTripPlanner (OTP); transit work deferred to lower priority while opening-hours and budget optimizer workstreams take precedence.
     milestones:
       - id: TR1
         title: Provider comparison and decision
-        state: TODO
+        state: DONE
       - id: TR2
         title: Transit adapter and normalized response model
         state: DONE
       - id: TR3
         title: Integrate transit branch without walk/car regressions
-        state: TODO
+        state: PARTIAL
       - id: TR4
         title: Transit-specific itinerary details in UI
         state: TODO

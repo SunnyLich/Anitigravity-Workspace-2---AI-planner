@@ -59,13 +59,13 @@ export class TSPSolver {
         const closeMin = this.timeToMinutes(candidate?.openingHours?.end || '18:00');
 
         if (!Number.isFinite(openMin) || !Number.isFinite(closeMin)) {
-            return { isValid: true, arrival: Math.round(arrivalMinutes), wait: 0 };
+            return { isValid: true, arrival: Math.round(arrivalMinutes), wait: 0, statusReason: null };
         }
 
         const duration = this.getDuration(candidate);
         const windowLength = closeMin > openMin ? closeMin - openMin : (closeMin + 1440) - openMin;
         if (duration > windowLength) {
-            return { isValid: false, arrival: 0, wait: 0 };
+            return { isValid: false, arrival: 0, wait: 0, statusReason: 'duration-exceeds-opening-window' };
         }
 
         const dayBase = Math.floor(arrivalMinutes / 1440) * 1440;
@@ -87,13 +87,14 @@ export class TSPSolver {
         adjustedArrival += wait;
 
         if (adjustedArrival + duration > closeAbsolute) {
-            return { isValid: false, arrival: 0, wait: 0 };
+            return { isValid: false, arrival: 0, wait: 0, statusReason: 'cannot-finish-before-close' };
         }
 
         return {
             isValid: true,
             arrival: Math.round(adjustedArrival),
             wait: Math.round(wait),
+            statusReason: null,
         };
     }
 
@@ -114,17 +115,29 @@ export class TSPSolver {
         const baseArrival = currentTime + travelTime + this.bufferTime;
         const windowResult = this.alignArrivalToOpeningWindow(baseArrival, candidate);
 
-        if (!windowResult.isValid) return null;
+        if (!windowResult.isValid) {
+            return {
+                isValid: false,
+                travelTime,
+                waitTime: 0,
+                arrival: baseArrival,
+                duration: this.getDuration(candidate),
+                addedTime: 0,
+                statusReason: windowResult.statusReason || 'opening-window-conflict',
+            };
+        }
 
         const duration = this.getDuration(candidate);
         const addedTime = (windowResult.arrival - currentTime) + duration;
 
         return {
+            isValid: true,
             travelTime,
             waitTime: windowResult.wait,
             arrival: windowResult.arrival,
             duration,
             addedTime,
+            statusReason: null,
         };
     }
 
@@ -152,12 +165,13 @@ export class TSPSolver {
             let minCost = Infinity;
             let nextArrivalTime = 0;
             let nextWaitTime = 0;
+            const candidateReasons = new Map();
 
             for (let i = 0; i < unvisited.length; i++) {
                 const candidate = unvisited[i];
                 const evaluated = this.evaluateCandidate(currentPos, currentTime, candidate);
 
-                if (evaluated) {
+                if (evaluated?.isValid) {
                     // Cost function: travel time + wait time (greedy)
                     const cost = evaluated.travelTime + evaluated.waitTime;
                     if (cost < minCost) {
@@ -166,13 +180,28 @@ export class TSPSolver {
                         nextArrivalTime = evaluated.arrival;
                         nextWaitTime = evaluated.waitTime;
                     }
+                } else if (evaluated?.statusReason) {
+                    candidateReasons.set(candidate.id, evaluated.statusReason);
                 }
             }
 
             if (bestNext === null) {
                 // No valid next location found that respects time windows
-                // For MVP, we'll just pick the closest one and mark it as "overdue" or logic to skip
                 console.warn("Could not find a valid next stop respecting opening hours.");
+
+                const unscheduledStops = unvisited.map((stop) => ({
+                    ...stop,
+                    statusReason: candidateReasons.get(stop.id) || 'opening-window-conflict',
+                }));
+
+                this.lastSolveMeta = {
+                    mode: 'shortest-feasible',
+                    completedCount: itinerary.length,
+                    droppedCount: unvisited.length,
+                    totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
+                    unscheduledStops,
+                };
+                itinerary.unscheduledStops = unscheduledStops;
                 break;
             }
 
@@ -192,12 +221,16 @@ export class TSPSolver {
             currentPos = nextNode;
         }
 
-        this.lastSolveMeta = {
-            mode: 'shortest-feasible',
-            completedCount: itinerary.length,
-            droppedCount: unvisited.length,
-            totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
-        };
+        if (!this.lastSolveMeta || this.lastSolveMeta.mode !== 'shortest-feasible') {
+            this.lastSolveMeta = {
+                mode: 'shortest-feasible',
+                completedCount: itinerary.length,
+                droppedCount: unvisited.length,
+                totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
+                unscheduledStops: [],
+            };
+            itinerary.unscheduledStops = [];
+        }
 
         return itinerary;
     }
@@ -206,38 +239,77 @@ export class TSPSolver {
         if (this.locations.length === 0) return [];
 
         const budgetLimit = Math.max(1, Math.round(Number(timeBudgetMinutes) || 240));
+        const startAnchor = this.locations[0];
 
         let unvisited = [...this.locations];
-        let currentPos = unvisited.shift();
-        let currentTime = this.timeToMinutes(this.startTime);
+
+        // Priority mode should not depend on add-order for the first stop.
+        // Seed with the highest-priority feasible location at trip start.
+        let seedIndex = 0;
+        let seedScore = -Infinity;
+        const seedClockMinutes = this.timeToMinutes(this.startTime);
+
+        for (let i = 0; i < unvisited.length; i++) {
+            const candidate = unvisited[i];
+            const windowResult = this.alignArrivalToOpeningWindow(seedClockMinutes, candidate);
+            if (!windowResult.isValid) continue;
+
+            const priority = this.getPriority(candidate);
+            const waitPenalty = windowResult.wait * 0.01;
+            const score = priority - waitPenalty;
+
+            if (score > seedScore) {
+                seedScore = score;
+                seedIndex = i;
+            }
+        }
+
+        let currentPos = unvisited.splice(seedIndex, 1)[0];
+        const tripStartMinutes = this.timeToMinutes(this.startTime);
+        let currentTime = tripStartMinutes;
 
         const firstDuration = this.getDuration(currentPos);
-        let budgetUsed = firstDuration;
+        const firstTravelMinutes = (startAnchor && currentPos && startAnchor.id !== currentPos.id)
+            ? this.getTravelTime(startAnchor, currentPos)
+            : 0;
+        const firstBaseArrival = tripStartMinutes + firstTravelMinutes;
+        const firstWindow = this.alignArrivalToOpeningWindow(firstBaseArrival, currentPos);
+        const firstArrivalMinutes = firstWindow.isValid ? firstWindow.arrival : firstBaseArrival;
+        const firstWaitMinutes = firstWindow.isValid ? firstWindow.wait : 0;
+        let budgetUsed = firstTravelMinutes + firstWaitMinutes + firstDuration;
 
         const itinerary = [{
             ...currentPos,
-            arrivalTime: this.startTime,
-            departureTime: this.minutesToTime(currentTime + firstDuration),
-            arrivalAbsoluteMinutes: currentTime,
-            departureAbsoluteMinutes: currentTime + firstDuration,
-            waitTime: 0,
-            travelFromPrevious: 0,
+            arrivalTime: this.minutesToTime(firstArrivalMinutes),
+            departureTime: this.minutesToTime(firstArrivalMinutes + firstDuration),
+            arrivalAbsoluteMinutes: firstArrivalMinutes,
+            departureAbsoluteMinutes: firstArrivalMinutes + firstDuration,
+            waitTime: firstWaitMinutes,
+            travelFromPrevious: firstTravelMinutes,
+            firstLegFromStart: firstTravelMinutes > 0,
         }];
 
-        currentTime += firstDuration;
+        currentTime = firstArrivalMinutes + firstDuration;
 
         while (unvisited.length > 0) {
             let bestIndex = null;
             let bestScore = -Infinity;
             let bestEvaluated = null;
+            const candidateReasons = new Map();
 
             for (let i = 0; i < unvisited.length; i++) {
                 const candidate = unvisited[i];
                 const evaluated = this.evaluateCandidate(currentPos, currentTime, candidate);
-                if (!evaluated) continue;
+                if (!evaluated?.isValid) {
+                    candidateReasons.set(candidate.id, evaluated?.statusReason || 'opening-window-conflict');
+                    continue;
+                }
 
                 const projectedBudgetUse = budgetUsed + evaluated.addedTime;
-                if (projectedBudgetUse > budgetLimit) continue;
+                if (projectedBudgetUse > budgetLimit) {
+                    candidateReasons.set(candidate.id, 'exceeds-time-budget');
+                    continue;
+                }
 
                 const priority = this.getPriority(candidate);
                 const valueDensity = priority / Math.max(1, evaluated.addedTime);
@@ -252,6 +324,23 @@ export class TSPSolver {
             }
 
             if (bestIndex === null || !bestEvaluated) {
+                const unscheduledStops = unvisited.map((stop) => ({
+                    ...stop,
+                    statusReason: candidateReasons.get(stop.id) || 'no-feasible-next-stop',
+                }));
+
+                this.lastSolveMeta = {
+                    mode: 'max-priority-budget',
+                    budgetLimitMinutes: budgetLimit,
+                    budgetUsedMinutes: Math.round(budgetUsed),
+                    budgetRemainingMinutes: Math.max(0, Math.round(budgetLimit - budgetUsed)),
+                    completedCount: itinerary.length,
+                    droppedCount: unvisited.length,
+                    totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
+                    droppedStopIds: unvisited.map((stop) => stop.id),
+                    unscheduledStops,
+                };
+                itinerary.unscheduledStops = unscheduledStops;
                 break;
             }
 
@@ -271,16 +360,20 @@ export class TSPSolver {
             currentPos = nextNode;
         }
 
-        this.lastSolveMeta = {
-            mode: 'max-priority-budget',
-            budgetLimitMinutes: budgetLimit,
-            budgetUsedMinutes: Math.round(budgetUsed),
-            budgetRemainingMinutes: Math.max(0, Math.round(budgetLimit - budgetUsed)),
-            completedCount: itinerary.length,
-            droppedCount: unvisited.length,
-            totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
-            droppedStopIds: unvisited.map((stop) => stop.id),
-        };
+        if (!this.lastSolveMeta || this.lastSolveMeta.mode !== 'max-priority-budget') {
+            this.lastSolveMeta = {
+                mode: 'max-priority-budget',
+                budgetLimitMinutes: budgetLimit,
+                budgetUsedMinutes: Math.round(budgetUsed),
+                budgetRemainingMinutes: Math.max(0, Math.round(budgetLimit - budgetUsed)),
+                completedCount: itinerary.length,
+                droppedCount: unvisited.length,
+                totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
+                droppedStopIds: unvisited.map((stop) => stop.id),
+                unscheduledStops: [],
+            };
+            itinerary.unscheduledStops = [];
+        }
 
         return itinerary;
     }

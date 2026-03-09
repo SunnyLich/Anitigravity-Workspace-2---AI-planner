@@ -1,15 +1,19 @@
 # ADR 0001: Transit Provider Strategy for London, Ontario
 
-Status: Proposed  
+Status: Accepted  
 Date: 2026-03-09
 
 ## Context
 `transit` mode is currently placeholder behavior and does not use schedule-aware public transit data.
 
-## Decision to make
-Select a primary transit provider and fallback approach for real schedule-aware routing.
+## Decision
+Use OpenTripPlanner (OTP2) as the primary schedule-aware transit provider, backed by local GTFS and OSM data.
 
-## Candidates
+Fallback strategy:
+1. Keep mock/unavailable fallback behavior for provider downtime or feed issues.
+2. Preserve normalized route contract so alternate providers can be added later without UI refactors.
+
+## Candidates considered
 1. OpenTripPlanner + GTFS + OSM (self-hosted).
 2. Google transit API stack (managed).
 3. TransitLand or equivalent GTFS-powered provider.
@@ -22,12 +26,17 @@ Select a primary transit provider and fallback approach for real schedule-aware 
 4. Reliability and latency.
 5. Licensing compatibility.
 
+## Rationale
+1. Avoids per-request API billing and vendor lock-in.
+2. Provides schedule-aware itineraries with transfer support.
+3. Fits planned adapter architecture and normalized response model.
+4. Acceptable tradeoff: higher operational complexity (hosting/feed refresh).
+
 ## Consequences (expected)
 - Positive: accurate transit ETAs and route legs.
 - Negative: added provider complexity and failure-mode handling.
 
 ## Follow-up
-After provider selection:
-1. Define normalized transit response contract.
-2. Implement `getTransitRouteEstimate` adapter.
-3. Add transit unavailable fallback UX.
+1. Implement `getTransitRouteEstimate` adapter against OTP (`TR-003`).
+2. Add transit unavailable fallback UX (`TR-004`/`TR-005`).
+3. Add feed refresh and health-check operational notes.
