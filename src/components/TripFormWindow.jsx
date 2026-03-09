@@ -365,15 +365,12 @@ const TripFormWindow = ({
                 {!isTimeConstrainedMode && (
                     <div className="space-y-2">
                         <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Trip Date</label>
-                        <div className="relative">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
                             <input
                                 type="date"
                                 value={tripDate}
                                 onChange={(e) => onTripDateChange(e.target.value)}
                                 className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
                             />
-                        </div>
                     </div>
                 )}
 
@@ -498,7 +495,7 @@ const TripFormWindow = ({
                             value={searchQuery}
                             onChange={handleSearch}
                             className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                            placeholder="Louvre, Eiffel Tower..."
+                            placeholder="          Louvre, Eiffel Tower..."
                         />
                     </div>
 
@@ -533,7 +530,14 @@ const TripFormWindow = ({
                             <div key={loc.id} className="glass-card p-3">
                                 <div className="flex items-start gap-2">
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-bold truncate" title={loc.name}>{loc.name}</p>
+                                        <div className="flex items-start gap-2 min-w-0">
+                                            <p className="text-xs font-bold truncate flex-1 min-w-0" title={loc.name}>{loc.name}</p>
+                                            {loc.address && (
+                                                <p className="text-[10px] text-text-muted truncate text-right min-w-0 max-w-[58%]" title={loc.address}>
+                                                    {loc.address}
+                                                </p>
+                                            )}
+                                        </div>
                                         {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
                                         {isTimeConstrainedMode && (
                                             <div className="mt-2 flex items-center gap-2">
@@ -723,7 +727,7 @@ const TripFormWindow = ({
                     )}
                 </div>
 
-                {routeEstimate && (
+                {/* {routeEstimate && (
                     <div className="glass-card space-y-1">
                         {routeEstimate.provider === 'error' ? (
                             <p className="text-xs font-bold text-accent">{routeEstimate.message}</p>
@@ -739,7 +743,7 @@ const TripFormWindow = ({
                             </>
                         )}
                     </div>
-                )}
+                )} */}
             </div>
         </WindowWrapper>
     );

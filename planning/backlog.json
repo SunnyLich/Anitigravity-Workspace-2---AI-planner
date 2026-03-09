@@ -10,7 +10,7 @@
       "title": "Implement openingRules compatibility adapter",
       "workstream": "opening-hours-optimizer",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
       "owner": "unassigned",
       "acceptance": [
@@ -91,7 +91,7 @@
       "title": "Define normalized transit response contract",
       "workstream": "real-transit",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "S",
       "owner": "unassigned"
     },
@@ -148,6 +148,19 @@
       "status": "todo",
       "estimate": "M",
       "owner": "unassigned"
+    },
+    {
+      "id": "UX-003",
+      "title": "Add address enrichment to map context actions",
+      "workstream": "planner-ux",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "POI right-click add preserves source address",
+        "Empty-map context add and saved-location creation reverse geocode full address"
+      ]
     }
   ]
 }

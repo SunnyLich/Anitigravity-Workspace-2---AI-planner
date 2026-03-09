@@ -4,6 +4,21 @@ const MAPBOX_PROFILE_BY_METHOD = {
   transit: 'driving-traffic',
 };
 
+/**
+ * Normalized route estimate contract used across UI and provider adapters.
+ * @typedef {Object} RouteEstimate
+ * @property {string} provider
+ * @property {'walk'|'car'|'transit'} travelMethod
+ * @property {string} profile
+ * @property {number} distanceKm
+ * @property {number} durationMinutes
+ * @property {Array<[number, number]>} geometry - [lat, lng] points
+ * @property {Array<{summary: string, durationMinutes: number, distanceKm: number}>} legs
+ * @property {boolean} isScheduleAware
+ * @property {boolean} isMock
+ * @property {Array<{mode: string, from?: string, to?: string, durationMinutes: number}>} transitLegs
+ */
+
 function toRadians(value) {
   return (value * Math.PI) / 180;
 }
@@ -37,8 +52,9 @@ function buildMockRoute(origin, destination, travelMethod) {
   const midLat = (origin.lat + destination.lat) / 2 + 0.0045;
   const midLng = (origin.lng + destination.lng) / 2 - 0.003;
 
-  return {
+  return normalizeRouteEstimate({
     provider: 'mock',
+    travelMethod,
     profile: MAPBOX_PROFILE_BY_METHOD[travelMethod] || 'walking',
     distanceKm: Number(routeKm.toFixed(2)),
     durationMinutes,
@@ -54,12 +70,15 @@ function buildMockRoute(origin, destination, travelMethod) {
         distanceKm: Number(routeKm.toFixed(2)),
       },
     ],
-  };
+    isScheduleAware: false,
+    isMock: true,
+  });
 }
 
 function normalizeMapboxRoute(route, travelMethod) {
-  return {
+  return normalizeRouteEstimate({
     provider: 'mapbox',
+    travelMethod,
     profile: MAPBOX_PROFILE_BY_METHOD[travelMethod] || 'walking',
     distanceKm: Number((route.distance / 1000).toFixed(2)),
     durationMinutes: Math.max(1, Math.round(route.duration / 60)),
@@ -69,6 +88,60 @@ function normalizeMapboxRoute(route, travelMethod) {
       durationMinutes: Math.max(1, Math.round(leg.duration / 60)),
       distanceKm: Number((leg.distance / 1000).toFixed(2)),
     })),
+    isScheduleAware: false,
+    isMock: false,
+  });
+}
+
+/**
+ * @param {Partial<RouteEstimate>} raw
+ * @returns {RouteEstimate}
+ */
+function normalizeRouteEstimate(raw) {
+  const travelMethod = ['walk', 'car', 'transit'].includes(raw?.travelMethod)
+    ? raw.travelMethod
+    : 'walk';
+
+  const profile = String(raw?.profile || MAPBOX_PROFILE_BY_METHOD[travelMethod] || 'walking');
+  const distanceKm = Number.isFinite(Number(raw?.distanceKm)) ? Number(raw.distanceKm) : 0;
+  const durationMinutes = Math.max(1, Math.round(Number(raw?.durationMinutes) || 1));
+
+  const geometry = Array.isArray(raw?.geometry)
+    ? raw.geometry
+      .filter((point) => Array.isArray(point) && point.length === 2)
+      .map(([lat, lng]) => [Number(lat), Number(lng)])
+      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
+    : [];
+
+  const legs = Array.isArray(raw?.legs)
+    ? raw.legs.map((leg, index) => ({
+      summary: String(leg?.summary || `Leg ${index + 1}`),
+      durationMinutes: Math.max(1, Math.round(Number(leg?.durationMinutes) || 1)),
+      distanceKm: Number.isFinite(Number(leg?.distanceKm)) ? Number(leg.distanceKm) : 0,
+    }))
+    : [];
+
+  const transitLegs = Array.isArray(raw?.transitLegs)
+    ? raw.transitLegs
+      .map((leg) => ({
+        mode: String(leg?.mode || 'unknown'),
+        from: leg?.from ? String(leg.from) : undefined,
+        to: leg?.to ? String(leg.to) : undefined,
+        durationMinutes: Math.max(1, Math.round(Number(leg?.durationMinutes) || 1)),
+      }))
+    : [];
+
+  return {
+    provider: String(raw?.provider || 'unknown'),
+    travelMethod,
+    profile,
+    distanceKm: Number(distanceKm.toFixed(2)),
+    durationMinutes,
+    geometry,
+    legs,
+    isScheduleAware: Boolean(raw?.isScheduleAware),
+    isMock: Boolean(raw?.isMock),
+    transitLegs,
   };
 }
 

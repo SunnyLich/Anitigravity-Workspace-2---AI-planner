@@ -68,11 +68,11 @@ workstreams:
     status: PARTIAL
     owner: Team
     priority: P0
-    notes: Baseline parsing and POI hours preservation done; full feasibility pipeline pending.
+    notes: Baseline parsing, POI hours preservation, and openingRules compatibility adapter done; full feasibility pipeline pending.
     milestones:
       - id: OH1
         title: Data model adapter and time helpers
-        state: TODO
+        state: PARTIAL
       - id: OH2
         title: Feasibility-aware solver output
         state: TODO
@@ -111,17 +111,17 @@ workstreams:
       - Existing shortest-feasible mode remains regression-safe.
   - id: real-transit
     name: Real transit routing integration
-    status: TODO
+    status: PARTIAL
     owner: Team
     priority: P0
-    notes: Transit currently uses placeholder behavior; requires provider evaluation and adapter integration.
+    notes: Transit response contract is defined; provider evaluation and adapter integration remain.
     milestones:
       - id: TR1
         title: Provider comparison and decision
         state: TODO
       - id: TR2
         title: Transit adapter and normalized response model
-        state: TODO
+        state: DONE
       - id: TR3
         title: Integrate transit branch without walk/car regressions
         state: TODO

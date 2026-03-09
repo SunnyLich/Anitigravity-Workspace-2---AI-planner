@@ -1,7 +1,38 @@
 const DEFAULT_OPENING_HOURS = { start: '09:00', end: '18:00' };
 const DEFAULT_VISIT_PRIORITY = 1;
+const LEGACY_DAY_ALIASES = {
+  mo: 'mo',
+  mon: 'mo',
+  monday: 'mo',
+  tu: 'tu',
+  tue: 'tu',
+  tues: 'tu',
+  tuesday: 'tu',
+  we: 'we',
+  wed: 'we',
+  weds: 'we',
+  wednesday: 'we',
+  th: 'th',
+  thu: 'th',
+  thur: 'th',
+  thurs: 'th',
+  thursday: 'th',
+  fr: 'fr',
+  fri: 'fr',
+  friday: 'fr',
+  sa: 'sa',
+  sat: 'sa',
+  saturday: 'sa',
+  su: 'su',
+  sun: 'su',
+  sunday: 'su',
+};
 
 const TIME_RANGE_REGEX = /([01]\d|2[0-3]):([0-5]\d)\s*-\s*([01]\d|2[0-3]):([0-5]\d)/;
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
 function isValidOpeningHours(value) {
   if (!value || typeof value !== 'object') return false;
@@ -28,9 +59,78 @@ function parseOpeningHoursText(text) {
   };
 }
 
-function resolveOpeningHours(raw) {
+function normalizeLegacyDayKey(key) {
+  const normalized = String(key || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+  return LEGACY_DAY_ALIASES[normalized] || null;
+}
+
+function normalizeDayRule(rule) {
+  if (isValidOpeningHours(rule)) {
+    return {
+      start: String(rule.start).trim(),
+      end: String(rule.end).trim(),
+    };
+  }
+
+  const parsedFromText = parseOpeningHoursText(rule);
+  if (parsedFromText) return parsedFromText;
+
+  return null;
+}
+
+function extractLegacyOpeningRuleMap(value) {
+  if (!isPlainObject(value) || isValidOpeningHours(value)) return null;
+
+  const days = {};
+
+  for (const [rawKey, rawRule] of Object.entries(value)) {
+    const dayKey = normalizeLegacyDayKey(rawKey);
+    if (!dayKey) continue;
+
+    const normalizedRule = normalizeDayRule(rawRule);
+    if (normalizedRule) {
+      days[dayKey] = normalizedRule;
+    }
+  }
+
+  return Object.keys(days).length > 0 ? days : null;
+}
+
+function resolveOpeningRules(raw) {
+  const fromOpeningRules = extractLegacyOpeningRuleMap(raw?.openingRules?.days)
+    || extractLegacyOpeningRuleMap(raw?.openingRules);
+  if (fromOpeningRules) {
+    return { days: fromOpeningRules };
+  }
+
+  const fromLegacyOpeningHours = extractLegacyOpeningRuleMap(raw?.openingHours);
+  if (fromLegacyOpeningHours) {
+    return { days: fromLegacyOpeningHours };
+  }
+
+  return null;
+}
+
+function deriveOpeningHoursFromRules(openingRules) {
+  if (!isPlainObject(openingRules?.days)) return null;
+
+  const priorityOrder = ['mo', 'tu', 'we', 'th', 'fr', 'sa', 'su'];
+  for (const day of priorityOrder) {
+    const candidate = normalizeDayRule(openingRules.days[day]);
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
+
+function resolveOpeningHours(raw, openingRules) {
   if (isValidOpeningHours(raw?.openingHours)) {
     return raw.openingHours;
+  }
+
+  const fromRules = deriveOpeningHoursFromRules(openingRules);
+  if (fromRules) {
+    return fromRules;
   }
 
   const parsedFromText = parseOpeningHoursText(raw?.hours || raw?.opening_hours || raw?.openingHoursText);
@@ -98,6 +198,7 @@ export function normalizeLocation(raw, source = 'external') {
   const id = raw.id ? buildId(source, raw.id) : buildId(source);
   const openingHoursText = String(raw.hours || raw.opening_hours || raw.openingHoursText || '').trim();
   const priority = resolvePriority(raw, source);
+  const openingRules = resolveOpeningRules(raw);
 
   return {
     id,
@@ -110,7 +211,8 @@ export function normalizeLocation(raw, source = 'external') {
     note: raw.note || '',
     priority,
     userPriority: priority,
-    openingHours: resolveOpeningHours(raw),
+    openingHours: resolveOpeningHours(raw, openingRules),
+    openingRules,
     openingHoursText,
     duration: Number.isFinite(raw.duration) ? raw.duration : 60,
   };

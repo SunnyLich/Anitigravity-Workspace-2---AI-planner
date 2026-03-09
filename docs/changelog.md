@@ -2,6 +2,14 @@
 
 ## 2026-03-09
 - Split project tracker into focused planning artifacts under `docs/` and `planning/`.
+- Added `openingRules` compatibility adapter in location normalization.
+- Legacy `openingHours` weekly maps now normalize into `openingRules.days`.
+- Derived fallback `openingHours` from normalized rules to avoid regressions in persisted data.
+- Map POI right-click context menu now carries POI address through to added trip locations.
+- Empty-map context actions now reverse geocode coordinates via Nominatim for full-address enrichment.
+- Added in-memory caching and request throttling for reverse geocoding to stay usage-safe.
+- Saved-location rename/edit now syncs to linked trip entries via `linkedCustomNodeId`.
+- Defined a normalized route/transit response contract in `mapboxRouting` for adapter-ready provider integration.
 
 ## 2026-03-05
 - Added opening-hours-aware optimization implementation plan.

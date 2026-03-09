@@ -5,6 +5,7 @@ import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
 import { getRouteEstimate } from './services/mapboxRouting';
+import { reverseGeocodeLocation } from './services/nominatim';
 import { createCustomLocation, normalizeLocation } from './utils/locationModel';
 import { loadPoisFromFolder } from './utils/poiLoader';
 
@@ -150,6 +151,7 @@ function App() {
     sourceType: 'map',
     sourceId: null,
     sourceName: '',
+    sourceAddress: '',
     sourceOpeningHours: null,
     sourceOpeningHoursText: '',
   });
@@ -395,14 +397,21 @@ function App() {
     const normalized = normalizeLocation(rawLocation, rawLocation.source || 'search');
     if (!normalized) return;
 
+    const linkedCustomNodeId = rawLocation?.linkedCustomNodeId
+      || (rawLocation?.source === 'custom' ? rawLocation.id : null);
+
+    const normalizedWithLink = linkedCustomNodeId
+      ? { ...normalized, linkedCustomNodeId }
+      : normalized;
+
     if (options.focusOnMap) {
-      focusMapOnLocation(normalized);
+      focusMapOnLocation(normalizedWithLink);
     }
 
     setLocations(prev => {
-      const exists = prev.some(item => item.id === normalized.id);
+      const exists = prev.some(item => item.id === normalizedWithLink.id);
       if (exists) return prev;
-      return [...prev, normalized];
+      return [...prev, normalizedWithLink];
     });
   };
 
@@ -429,16 +438,40 @@ function App() {
   };
 
   const updateCustomNode = (locationId, updates) => {
+    const nextName = String(updates.name || '').trim();
+    const nextNote = typeof updates.note === 'string' ? updates.note : undefined;
+    let previousNode = null;
+
     setCustomNodes(prev =>
       prev.map(item => {
         if (item.id !== locationId) return item;
+        previousNode = item;
         return {
           ...item,
-          name: updates.name ?? item.name,
-          note: updates.note ?? item.note,
+          name: nextName || item.name,
+          note: nextNote ?? item.note,
         };
       })
     );
+
+    // Keep trip entries derived from this saved node synchronized after rename/edit.
+    setLocations(prev => prev.map((item) => {
+      const linkedById = item.linkedCustomNodeId === locationId;
+      const linkedByLegacyMatch = !item.linkedCustomNodeId
+        && previousNode
+        && toLocationKey(item) === toLocationKey(previousNode);
+
+      if (!linkedById && !linkedByLegacyMatch) {
+        return item;
+      }
+
+      return {
+        ...item,
+        linkedCustomNodeId: locationId,
+        name: nextName || item.name,
+        note: nextNote ?? item.note,
+      };
+    }));
   };
 
   const deleteCustomNode = (locationId) => {
@@ -556,6 +589,8 @@ function App() {
     const normalized = normalizeLocation(location, 'custom');
     if (!normalized) return;
 
+    let createdSavedLocation = null;
+
     setCustomNodes((prev) => {
       const alreadySaved = prev.some((node) => toLocationKey(node) === toLocationKey(normalized));
       if (alreadySaved) return prev;
@@ -566,8 +601,24 @@ function App() {
         source: 'custom',
       };
 
+      createdSavedLocation = savedLocation;
+
       return [...prev, savedLocation];
     });
+
+    if (!createdSavedLocation) return;
+
+    // Link matching trip entries so later saved-node renames propagate correctly.
+    setLocations((prev) => prev.map((item) => {
+      if (toLocationKey(item) !== toLocationKey(normalized)) {
+        return item;
+      }
+
+      return {
+        ...item,
+        linkedCustomNodeId: createdSavedLocation.id,
+      };
+    }));
   };
 
   return (
@@ -592,6 +643,7 @@ function App() {
               sourceType: payload.sourceType || 'map',
               sourceId: payload.sourceId || null,
               sourceName: payload.sourceName || '',
+              sourceAddress: payload.sourceAddress || '',
               sourceOpeningHours: payload.sourceOpeningHours || null,
               sourceOpeningHoursText: payload.sourceOpeningHoursText || '',
             });
@@ -613,25 +665,37 @@ function App() {
         >
           <button
             className="w-full text-left px-3 py-2 hover:bg-white/10 rounded-lg"
-            onClick={() => {
-              const location = mapContextMenu.sourceType === 'poi'
+            onClick={async () => {
+              const context = { ...mapContextMenu };
+              let resolvedAddress = String(context.sourceAddress || '').trim();
+
+              if (!resolvedAddress && context.sourceType !== 'poi') {
+                const reverseResult = await reverseGeocodeLocation({ lat: context.lat, lng: context.lng });
+                resolvedAddress = String(reverseResult?.address || '').trim();
+              }
+
+              const location = context.sourceType === 'poi'
                 ? normalizeLocation({
-                    id: mapContextMenu.sourceId,
-                    name: mapContextMenu.sourceName,
-                    lat: mapContextMenu.lat,
-                    lng: mapContextMenu.lng,
-                    openingHours: mapContextMenu.sourceOpeningHours,
-                    openingHoursText: mapContextMenu.sourceOpeningHoursText,
+                    id: context.sourceId,
+                    name: context.sourceName,
+                    lat: context.lat,
+                    lng: context.lng,
+                    address: resolvedAddress,
+                    openingHours: context.sourceOpeningHours,
+                    openingHoursText: context.sourceOpeningHoursText,
                   }, 'poi')
-                : createCustomLocation({
-                    name: mapContextMenu.sourceName || `Map Pin (${mapContextMenu.lat.toFixed(4)}, ${mapContextMenu.lng.toFixed(4)})`,
-                    lat: mapContextMenu.lat,
-                    lng: mapContextMenu.lng,
-                  });
+                : {
+                    ...createCustomLocation({
+                      name: context.sourceName || `Map Pin (${context.lat.toFixed(4)}, ${context.lng.toFixed(4)})`,
+                      lat: context.lat,
+                      lng: context.lng,
+                    }),
+                    address: resolvedAddress,
+                  };
 
               if (!location) return;
 
-              if (mapContextMenu.sourceType !== 'poi') {
+              if (context.sourceType !== 'poi') {
                 setCustomNodes(prev => {
                   const exists = prev.some(item => item.id === location.id);
                   return exists ? prev : [...prev, location];
@@ -687,13 +751,17 @@ function App() {
           <div className="flex gap-2">
             <button
               className="flex-1 bg-primary hover:bg-primary-hover py-2.5 rounded-xl text-xs font-bold"
-              onClick={() => {
-                const created = createCustomLocation({
+              onClick={async () => {
+                const reverseResult = await reverseGeocodeLocation({ lat: customNodeDraft.lat, lng: customNodeDraft.lng });
+                const created = {
+                  ...createCustomLocation({
                   name: customNodeDraft.name,
                   lat: customNodeDraft.lat,
                   lng: customNodeDraft.lng,
                   note: customNodeDraft.note,
-                });
+                  }),
+                  address: String(reverseResult?.address || '').trim(),
+                };
                 setCustomNodes(prev => [...prev, created]);
                 addLocationToTrip(created);
                 setCustomNodeDraft({ open: false, lat: null, lng: null, name: '', note: '' });
