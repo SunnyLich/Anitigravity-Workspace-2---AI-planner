@@ -9,8 +9,13 @@ lerna-debug.log*
 
 node_modules
 dist
+dist/
 dist-ssr
 *.local
+
+# Local large/generated artifacts
+london ontario map.xml
+mermaid-diagram.png
 
 # Editor directories and files
 .vscode/*
