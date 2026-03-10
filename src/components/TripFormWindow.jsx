@@ -223,12 +223,48 @@ const TripFormWindow = ({
     onTripEndDateChange,
     onTripStartTimeChange,
     onTripEndTimeChange,
-    onWakeTimeChange,
-    onSleepTimeChange,
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [showSavedNodes, setShowSavedNodes] = useState(true);
+    const [editingSavedNodeId, setEditingSavedNodeId] = useState('');
+    const [editingSavedField, setEditingSavedField] = useState('');
+    const [editingSavedValue, setEditingSavedValue] = useState('');
+
+    const startSavedNodeInlineEdit = (node, field) => {
+        setEditingSavedNodeId(node.id);
+        setEditingSavedField(field);
+        setEditingSavedValue(String(node?.[field] || ''));
+    };
+
+    const cancelSavedNodeInlineEdit = () => {
+        setEditingSavedNodeId('');
+        setEditingSavedField('');
+        setEditingSavedValue('');
+    };
+
+    const commitSavedNodeInlineEdit = (node) => {
+        if (!node || !editingSavedField) {
+            cancelSavedNodeInlineEdit();
+            return;
+        }
+
+        if (editingSavedField === 'name') {
+            const nextName = String(editingSavedValue || '').trim();
+            if (nextName && nextName !== node.name) {
+                onEditLocation(node.id, { name: nextName });
+            }
+        }
+
+        if (editingSavedField === 'note') {
+            const nextNote = String(editingSavedValue || '');
+            if (nextNote !== String(node.note || '')) {
+                onEditLocation(node.id, { note: nextNote });
+            }
+        }
+
+        cancelSavedNodeInlineEdit();
+    };
 
     const selectableLocations = useMemo(() => {
         const merged = [...locations, ...customNodes];
@@ -410,28 +446,11 @@ const TripFormWindow = ({
                                 aria-label="Trip end time"
                             />
                         </div>
-                        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Daily Availability</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <input
-                                type="time"
-                                value={wakeTime}
-                                onChange={(e) => onWakeTimeChange(e.target.value)}
-                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                aria-label="Wake time"
-                            />
-                            <input
-                                type="time"
-                                value={sleepTime}
-                                onChange={(e) => onSleepTimeChange(e.target.value)}
-                                className="w-full bg-bg-deep border border-border-glass rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                aria-label="Sleep time"
-                            />
-                        </div>
-                        <p className={`text-[11px] ${hasValidTimeframe ? 'text-text-muted' : 'text-accent font-bold'}`}>
+                        {/* <p className={`text-[11px] ${hasValidTimeframe ? 'text-text-muted' : 'text-accent font-bold'}`}>
                             {hasValidTimeframe
                                 ? `Available planning time: ${timeframeMinutes} minutes (within wake-to-sleep windows)`
-                                : 'Set a valid multi-day range and daily wake/sleep window'}
-                        </p>
+                                : 'Set a valid multi-day range and daily availability in Settings'}
+                        </p> */}
                     </div>
                 )}
 
@@ -707,18 +726,61 @@ const TripFormWindow = ({
                         {customNodes.map((node) => (
                             <div key={node.id} className="glass-card p-2.5">
                                 <div className="flex items-center justify-between gap-2">
-                                    <p className="text-xs font-bold truncate flex-1">{node.name}</p>
+                                    <div className="flex-1 min-w-0">
+                                        {editingSavedNodeId === node.id && editingSavedField === 'name' ? (
+                                            <input
+                                                autoFocus
+                                                value={editingSavedValue}
+                                                onChange={(e) => setEditingSavedValue(e.target.value)}
+                                                onBlur={() => commitSavedNodeInlineEdit(node)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        commitSavedNodeInlineEdit(node);
+                                                    }
+                                                    if (e.key === 'Escape') {
+                                                        cancelSavedNodeInlineEdit();
+                                                    }
+                                                }}
+                                                className="w-full bg-bg-deep border border-border-glass rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                                                placeholder="Saved location name"
+                                            />
+                                        ) : (
+                                            <button
+                                                onClick={() => startSavedNodeInlineEdit(node, 'name')}
+                                                className="block w-full text-left text-xs font-bold truncate rounded-md px-1 py-0.5 hover:bg-white/10"
+                                                title="Click to edit name"
+                                            >
+                                                {node.name}
+                                            </button>
+                                        )}
+                                        {editingSavedNodeId === node.id && editingSavedField === 'note' ? (
+                                            <input
+                                                autoFocus
+                                                value={editingSavedValue}
+                                                onChange={(e) => setEditingSavedValue(e.target.value)}
+                                                onBlur={() => commitSavedNodeInlineEdit(node)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        commitSavedNodeInlineEdit(node);
+                                                    }
+                                                    if (e.key === 'Escape') {
+                                                        cancelSavedNodeInlineEdit();
+                                                    }
+                                                }}
+                                                className="mt-1 w-full bg-bg-deep border border-border-glass rounded-lg px-2 py-1 text-[11px] outline-none"
+                                                placeholder="Add a note for this saved location"
+                                            />
+                                        ) : (
+                                            <button
+                                                onClick={() => startSavedNodeInlineEdit(node, 'note')}
+                                                className={`mt-1 block w-full text-left rounded-md px-1 py-0.5 text-[11px] truncate hover:bg-white/10 ${String(node.note || '').trim() ? 'text-text-muted' : 'text-text-muted/60 italic'}`}
+                                                title="Click to edit note"
+                                            >
+                                                {String(node.note || '').trim() || 'Add a note...'}
+                                            </button>
+                                        )}
+                                    </div>
                                     <div className="flex gap-1">
-                                        <button
-                                            onClick={() => {
-                                                const editedName = window.prompt('Rename saved location', node.name);
-                                                if (!editedName) return;
-                                                onEditLocation(node.id, { name: editedName.trim() });
-                                            }}
-                                            className="text-[10px] px-2 py-1 rounded-md hover:bg-white/10"
-                                        >
-                                            Edit
-                                        </button>
                                         <button
                                             onClick={() => onDeleteLocation(node.id)}
                                             className="text-[10px] px-2 py-1 rounded-md hover:bg-accent/20 text-accent"
@@ -758,7 +820,7 @@ const TripFormWindow = ({
                     )}
                 </div>
 
-                {/* {routeEstimate && (
+                {routeEstimate && (
                     <div className="glass-card space-y-1">
                         {routeEstimate.provider === 'error' ? (
                             <p className="text-xs font-bold text-accent">{routeEstimate.message}</p>
@@ -768,13 +830,28 @@ const TripFormWindow = ({
                                 <p className="text-[11px] text-text-muted">
                                     {routeEstimate.durationMinutes} min • {routeEstimate.distanceKm} km • {travelMethod}
                                 </p>
-                                {routeEstimate.stopCount > 1 && (
-                                    <p className="text-[11px] text-text-muted">Stops in route: {routeEstimate.stopCount}</p>
+                                {routeEstimate.notice && (
+                                    <p className={`text-[11px] font-semibold ${routeEstimate.unavailable ? 'text-accent' : 'text-text-muted'}`}>
+                                        {routeEstimate.notice}
+                                    </p>
+                                )}
+                                {routeEstimate.isScheduleAware && (
+                                    <p className="text-[11px] text-text-muted">Schedule-aware transit estimate</p>
+                                )}
+                                {Array.isArray(routeEstimate.transitLegs) && routeEstimate.transitLegs.length > 0 && (
+                                    <div className="pt-1 space-y-1">
+                                        {routeEstimate.transitLegs.slice(0, 4).map((leg, index) => (
+                                            <p key={`${leg.mode}-${index}`} className="text-[11px] text-text-muted">
+                                                {leg.mode}: {leg.durationMinutes} min
+                                                {leg.from && leg.to ? ` (${leg.from} -> ${leg.to})` : ''}
+                                            </p>
+                                        ))}
+                                    </div>
                                 )}
                             </>
                         )}
                     </div>
-                )} */}
+                )}
             </div>
         </WindowWrapper>
     );

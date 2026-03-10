@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Compass, Search, CalendarCheck, Settings, Info, MapPin } from 'lucide-react';
+import { Compass, Search, CalendarCheck, Settings, MapPin } from 'lucide-react';
 import { TripFormWindow, WindowWrapper } from './components/TripFormWindow';
 import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
@@ -21,6 +21,7 @@ const TRIP_START_DATE_STORAGE_KEY = 'tripoptimizer.tripStartDate';
 const TRIP_END_DATE_STORAGE_KEY = 'tripoptimizer.tripEndDate';
 const WAKE_TIME_STORAGE_KEY = 'tripoptimizer.wakeTime';
 const SLEEP_TIME_STORAGE_KEY = 'tripoptimizer.sleepTime';
+const BREAK_TIME_STORAGE_KEY = 'tripoptimizer.breakTimeMinutes';
 
 const LOCATION_KEY_PRECISION = 5;
 const TIME_INPUT_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -134,6 +135,7 @@ function App() {
   const [sleepTime, setSleepTime] = useState('23:00');
   const [optimizerMode, setOptimizerMode] = useState('shortest-feasible');
   const [timeBudgetMinutes, setTimeBudgetMinutes] = useState(240);
+  const [breakTimeMinutes, setBreakTimeMinutes] = useState(15);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [routeEstimate, setRouteEstimate] = useState(null);
   const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
@@ -141,6 +143,7 @@ function App() {
   const [selectedStartId, setSelectedStartId] = useState('');
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [customNodes, setCustomNodes] = useState([]);
+  const [customNodesHydrated, setCustomNodesHydrated] = useState(false);
   const [pois, setPois] = useState([]);
   const [mapContextMenu, setMapContextMenu] = useState({
     visible: false,
@@ -161,8 +164,7 @@ function App() {
   const [windows, setWindows] = useState({
     search: true,
     itinerary: false,
-    settings: false,
-    info: false
+    settings: false
   });
 
   useEffect(() => {
@@ -178,26 +180,31 @@ function App() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_NODES_STORAGE_KEY);
-      if (!raw) return;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const normalized = Array.isArray(parsed)
+          ? parsed.map(item => normalizeLocation(item, 'custom')).filter(Boolean)
+          : [];
 
-      const parsed = JSON.parse(raw);
-      const normalized = Array.isArray(parsed)
-        ? parsed.map(item => normalizeLocation(item, 'custom')).filter(Boolean)
-        : [];
-
-      setCustomNodes(normalized);
+        setCustomNodes(normalized);
+      }
     } catch (error) {
       console.warn('Could not load custom nodes from storage:', error);
+    } finally {
+      // Avoid clobbering persisted data on first mount before hydration completes.
+      setCustomNodesHydrated(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!customNodesHydrated) return;
+
     try {
       localStorage.setItem(CUSTOM_NODES_STORAGE_KEY, JSON.stringify(customNodes));
     } catch (error) {
       console.warn('Could not save custom nodes:', error);
     }
-  }, [customNodes]);
+  }, [customNodes, customNodesHydrated]);
 
   useEffect(() => {
     try {
@@ -212,6 +219,7 @@ function App() {
       const rawTripEndDate = localStorage.getItem(TRIP_END_DATE_STORAGE_KEY);
       const rawWakeTime = localStorage.getItem(WAKE_TIME_STORAGE_KEY);
       const rawSleepTime = localStorage.getItem(SLEEP_TIME_STORAGE_KEY);
+      const rawBreakTimeMinutes = localStorage.getItem(BREAK_TIME_STORAGE_KEY);
 
       if (rawLocations) {
         const parsedLocations = JSON.parse(rawLocations);
@@ -256,6 +264,11 @@ function App() {
 
       if (TIME_INPUT_REGEX.test(String(rawSleepTime || ''))) {
         setSleepTime(String(rawSleepTime));
+      }
+
+      if (Number.isFinite(Number(rawBreakTimeMinutes))) {
+        const parsedBreak = Math.round(Number(rawBreakTimeMinutes));
+        setBreakTimeMinutes(Math.min(180, Math.max(0, parsedBreak)));
       }
 
       if (rawEndpoints) {
@@ -350,6 +363,14 @@ function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(BREAK_TIME_STORAGE_KEY, String(breakTimeMinutes));
+    } catch (error) {
+      console.warn('Could not save break time:', error);
+    }
+  }, [breakTimeMinutes]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(
         SELECTED_ENDPOINTS_STORAGE_KEY,
         JSON.stringify({ selectedStartId, selectedDestinationId })
@@ -419,6 +440,26 @@ function App() {
     setLocations(prev => prev.filter(item => item.id !== locationId));
   };
 
+  const handleSelectStart = (locationId) => {
+    setSelectedStartId(locationId || '');
+    if (!locationId) return;
+
+    const selected = resolveLocation(locationId);
+    if (!selected) return;
+
+    addLocationToTrip(selected);
+  };
+
+  const handleSelectDestination = (locationId) => {
+    setSelectedDestinationId(locationId || '');
+    if (!locationId) return;
+
+    const selected = resolveLocation(locationId);
+    if (!selected) return;
+
+    addLocationToTrip(selected);
+  };
+
   const updateTripLocationPriority = (locationId, priorityValue) => {
     const normalizedPriority = Math.min(5, Math.max(1, Math.round(Number(priorityValue) || 1)));
     setLocations((prev) => prev.map((item) => (
@@ -446,11 +487,18 @@ function App() {
       if (item.id !== locationId) return item;
 
       const current = item?.openingHours || { start: '09:00', end: '18:00' };
+      const metadata = (item && typeof item.metadata === 'object' && item.metadata)
+        ? item.metadata
+        : {};
       return {
         ...item,
         openingHours: {
           ...current,
           [field]: normalizedTime,
+        },
+        metadata: {
+          ...metadata,
+          openingHoursSource: 'user-edit',
         },
       };
     }));
@@ -556,7 +604,7 @@ function App() {
     setTimeout(async () => {
       const solver = new TSPSolver(runLocations, {
         travelSpeed: method === 'car' ? 40 : method === 'transit' ? 20 : 5,
-        bufferTime: 15,
+        bufferTime: Math.max(0, Math.round(Number(breakTimeMinutes) || 0)),
         startTime: requestedStartTime || '09:00'
       });
 
@@ -576,12 +624,14 @@ function App() {
           const origin = result[0];
           const destination = result[result.length - 1];
           const middleStops = result.slice(1, -1);
+          const routeDateTime = combineDateTime(requestedStartDate, requestedStartTime)?.toISOString();
 
           const routedEstimate = await getRouteEstimate({
             origin,
             destination,
             locations: middleStops,
             travelMethod: method,
+            dateTime: routeDateTime,
           });
 
           setRouteEndpoints({ origin, destination, source: 'itinerary-optimization' });
@@ -844,8 +894,8 @@ function App() {
             customNodes={customNodes}
             selectedStartId={selectedStartId}
             selectedDestinationId={selectedDestinationId}
-            onSetStart={setSelectedStartId}
-            onSetDestination={setSelectedDestinationId}
+            onSetStart={handleSelectStart}
+            onSetDestination={handleSelectDestination}
             onEditLocation={updateCustomNode}
             onDeleteLocation={deleteCustomNode}
             onSaveLocation={saveLocationAsSavedLocation}
@@ -862,8 +912,6 @@ function App() {
             onTripEndDateChange={setTripEndDate}
             onTripStartTimeChange={setTripStartTime}
             onTripEndTimeChange={setTripEndTime}
-            onWakeTimeChange={setWakeTime}
-            onSleepTimeChange={setSleepTime}
           />
 
           <ItineraryWindow
@@ -886,48 +934,57 @@ function App() {
           >
             <div className="space-y-4 text-sm">
               <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Routing</p>
-                <p className="mt-2 text-xs">Road routes use real Mapbox directions when configured, with a safe fallback path when unavailable.</p>
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Time Constrained Mode</p>
+                <div className="mt-2 space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Daily availability</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="time"
+                        value={wakeTime}
+                        onChange={(e) => setWakeTime(e.target.value)}
+                        className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                        aria-label="Wake time"
+                      />
+                      <input
+                        type="time"
+                        value={sleepTime}
+                        onChange={(e) => setSleepTime(e.target.value)}
+                        className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                        aria-label="Sleep time"
+                      />
+                    </div>
+                    <p className="text-[11px] text-text-muted">Used to compute available planning minutes for Time Constrained Mode.</p>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Break time between locations (minutes)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={180}
+                      step={5}
+                      value={breakTimeMinutes}
+                      onChange={(e) => {
+                        const next = Math.min(180, Math.max(0, Math.round(Number(e.target.value) || 0)));
+                        setBreakTimeMinutes(next);
+                      }}
+                      className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                    />
+                    <p className="text-[11px] text-text-muted">Applied directly to optimizer as per-stop buffer time.</p>
+                  </div>
+                </div>
               </div>
               <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Optimization Modes</p>
-                <ul className="mt-2 space-y-1 text-xs text-text-muted">
-                  <li>Normal Mode: shortest feasible sequencing with opening-hour checks.</li>
-                  <li>Time Constrained Mode: maximizes value under trip timeframe budget.</li>
-                </ul>
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Current Mode</p>
+                <p className="mt-2 text-xs text-text-muted">
+                  {optimizerMode === 'time-constrained-fit'
+                    ? 'Time Constrained Mode is active. Break time will affect schedule feasibility and budget usage.'
+                    : 'Switch to Time Constrained Mode in Plan Trip to use these settings during optimization.'}
+                </p>
               </div>
               <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Persistence</p>
-                <p className="mt-2 text-xs text-text-muted">Trip state, saved locations, endpoints, and time preferences persist locally in this browser.</p>
-              </div>
-            </div>
-          </WindowWrapper>
-          )}
-
-          {windows.info && (
-          <WindowWrapper
-            title="Help"
-            icon={Info}
-            onClose={() => toggleWindow('info')}
-            onMinimize={() => toggleWindow('info')}
-            style={{ top: '220px', right: '20px', width: '360px', maxHeight: '70vh' }}
-          >
-            <div className="space-y-4 text-sm">
-              <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Quick Start</p>
-                <ol className="mt-2 space-y-1 text-xs text-text-muted list-decimal list-inside">
-                  <li>Add at least two locations.</li>
-                  <li>Pick travel method and optimization mode.</li>
-                  <li>Click Optimize to generate itinerary and route.</li>
-                </ol>
-              </div>
-              <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Status Reasons</p>
-                <p className="mt-2 text-xs text-text-muted">Unscheduled stops include reasons such as opening-hour conflicts and time-budget overflow for easier tuning.</p>
-              </div>
-              <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Tips</p>
-                <p className="mt-2 text-xs text-text-muted">Edit per-stop duration, priority, and opening hours in the location list to improve fit quality.</p>
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Saved Locations Persistence</p>
+                <p className="mt-2 text-[11px] text-text-muted">Saved locations persist in local browser storage and are restored on app load.</p>
               </div>
             </div>
           </WindowWrapper>
@@ -957,13 +1014,6 @@ function App() {
           title="Settings"
         >
           <Settings size={22} />
-        </div>
-        <div
-          className={`dock-item ${windows.info ? 'active' : ''}`}
-          onClick={() => toggleWindow('info')}
-          title="Help"
-        >
-          <Info size={22} />
         </div>
       </div>
 

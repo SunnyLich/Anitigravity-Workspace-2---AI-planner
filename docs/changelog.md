@@ -1,6 +1,31 @@
 # Changelog
 
 ## 2026-03-10
+- Set Start and Set Destination actions from saved-location cards now also add the selected saved location into the trip location list when missing.
+- Tracking sync: added and completed `UX-007` under `custom-nodes`.
+- Saved-location cards now show each location note directly, including a muted default placeholder when no note exists.
+- Replaced prompt-based rename flow with inline click-to-edit for saved-location name and note (click text to edit).
+- Tracking sync: added and completed `UX-006` under `custom-nodes`.
+- Reverted saved-location persistence to browser-only localStorage by product decision; removed workspace-root file read/write flow.
+- Saved locations continue to persist and restore automatically on app load via localStorage.
+- Tracking sync: marked `SP-001` as `superseded` and updated `session-persistence` notes/milestone wording to browser-only behavior.
+- Updated folder-backed saved-location persistence to target `src/data/pois/saved-locations.json` (under a connected workspace root) and clarified this path in Settings/status messaging.
+- Added folder-backed saved-location persistence using browser File System Access API with startup load and JSON sync (`saved-locations.json`) for connected folders.
+- Settings now includes a "Connect or Change Folder" action and explicit fallback status messaging when folder persistence is unavailable or denied.
+- Tracking sync: marked `SP-001` and `SP2` as done, set `session-persistence` to `DONE`, and removed resolved current-focus item `CF-008`.
+- Moved daily availability (wake/sleep) controls from Trip Form into Settings under Time Constrained Mode.
+- Trip Form timeframe feedback now points users to Settings for daily availability configuration.
+- Tracking sync: marked `UX-005` and `SH4` as done, set `settings-help` workstream to `DONE`, and removed resolved current-focus item `CF-007`.
+- Replaced Help panel with actionable Settings controls for Time Constrained Mode.
+- Added persisted break-time setting (minutes between locations) and wired it into solver `bufferTime` so optimization output reflects the configured gap.
+- Tracking sync: marked `UX-004`, `SH2`, and `SH3` as done and removed resolved current-focus item `CF-006`.
+- Implemented opening-hours provenance clarity in UI: trip cards and itinerary now label hours as source-derived, user-edited, parsed text, or placeholder default.
+- Manual opening-hours edits now stamp provenance as `user-edit` in trip-location metadata.
+- Tracking sync: marked `OH-006` and `OH6` as done and removed resolved current-focus item `CF-005`.
+- Planning-only update: added new priority items for opening-hours provenance clarity, actionable settings rework (including break-time control), moving daily availability controls into settings, and folder-backed saved-location persistence.
+- Reopened related workstreams to `PARTIAL` where user-requested outcomes are not yet implemented: `opening-hours-optimizer`, `settings-help`, and `session-persistence`.
+- Added current-focus overrides `CF-005` through `CF-008` so these requests take precedence in upcoming `/work` execution.
+- Synced `planning/workstreams.yaml` status fields with completed backlog/milestone state: `location-model`, `opening-hours-optimizer`, `priority-budget-optimizer`, and `real-transit` are now marked `DONE`, and `OH1` milestone is marked `DONE`.
 - Replaced priority-budget solver greedy lookahead with DFS/backtracking search plus pruning.
 - Added optimistic upper-bound pruning and visited-state memoization to reduce branch exploration cost.
 - Priority mode now records `searchStrategy: dfs-backtracking-pruning` in solver metadata for easier verification.
@@ -18,6 +43,8 @@
 - Extended normalized location schema with opening-hours provenance metadata (`openingHoursSource`, opening-rules day coverage, source metadata) while preserving backward compatibility.
 - Hardened backward compatibility normalization by mapping legacy location fields (opening hours aliases, duration/priority aliases, and description note fallback) into the unified schema.
 - Added in-app Settings and Help windows, wired to dock controls, replacing the previous placeholder behavior.
+- Wired transit routing to pass trip schedule date/time into transit estimates and enabled transit-specific leg details in the planner route panel.
+- Added graceful transit fallback/unavailable messaging: fallback estimates now include explicit user-facing notices and unavailable states are surfaced in the route panel.
 
 ## 2026-03-09
 - Split project tracker into focused planning artifacts under `docs/` and `planning/`.

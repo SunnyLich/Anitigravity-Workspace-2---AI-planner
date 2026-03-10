@@ -18,6 +18,8 @@ const OTP_DEFAULT_TIMEOUT_MS = 12000;
  * @property {Array<{summary: string, durationMinutes: number, distanceKm: number}>} legs
  * @property {boolean} isScheduleAware
  * @property {boolean} isMock
+ * @property {boolean} unavailable
+ * @property {string} notice
  * @property {Array<{mode: string, from?: string, to?: string, durationMinutes: number}>} transitLegs
  */
 
@@ -77,7 +79,21 @@ function buildMockRoute(origin, destination, travelMethod) {
   });
 }
 
-function buildMockTransitRoute(origin, destination) {
+function buildTransitNotice(reason) {
+  const notices = {
+    'mock-config-enabled': 'Using mock transit estimates (mock mode enabled).',
+    'otp-not-configured': 'Transit provider is not configured. Showing fallback estimate.',
+    'otp-timeout': 'Transit provider timed out. Showing fallback estimate.',
+    'otp-http-error': 'Transit provider returned an error. Showing fallback estimate.',
+    'otp-no-itinerary': 'No transit itinerary was returned. Showing fallback estimate.',
+    'otp-request-failed': 'Transit provider is unavailable. Showing fallback estimate.',
+  };
+
+  return notices[reason] || 'Transit provider unavailable. Showing fallback estimate.';
+}
+
+function buildMockTransitRoute(origin, destination, options = {}) {
+  const fallbackReason = String(options.reason || 'mock-config-enabled');
   const directKm = haversineDistanceKm(origin, destination);
   const walkToStopMinutes = Math.max(4, Math.round(directKm * 6));
   const rideMinutes = Math.max(6, Math.round(directKm * 2.4));
@@ -126,6 +142,8 @@ function buildMockTransitRoute(origin, destination) {
     ],
     isScheduleAware: false,
     isMock: true,
+    unavailable: Boolean(options.unavailable),
+    notice: buildTransitNotice(fallbackReason),
   });
 }
 
@@ -214,8 +232,18 @@ export async function getTransitRouteEstimate({ origin, destination, dateTime = 
   const otpBaseUrl = String(import.meta.env.VITE_OTP_BASE_URL || '').trim();
   const timeoutMs = Math.max(2000, Number(import.meta.env.VITE_OTP_TIMEOUT_MS || OTP_DEFAULT_TIMEOUT_MS));
 
-  if (forceMockTransit || !otpBaseUrl) {
-    return buildMockTransitRoute(origin, destination);
+  if (forceMockTransit) {
+    return buildMockTransitRoute(origin, destination, {
+      reason: 'mock-config-enabled',
+      unavailable: false,
+    });
+  }
+
+  if (!otpBaseUrl) {
+    return buildMockTransitRoute(origin, destination, {
+      reason: 'otp-not-configured',
+      unavailable: true,
+    });
   }
 
   const controller = new AbortController();
@@ -241,20 +269,32 @@ export async function getTransitRouteEstimate({ origin, destination, dateTime = 
   try {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) {
-      throw new Error(`OTP routing failed (${response.status}).`);
+      throw new Error(`otp-http-error:${response.status}`);
     }
 
     const data = await response.json();
     const itinerary = data?.plan?.itineraries?.[0];
 
     if (!itinerary) {
-      throw new Error('OTP returned no valid itinerary.');
+      throw new Error('otp-no-itinerary');
     }
 
     return normalizeOtpItinerary(itinerary);
   } catch (error) {
     console.warn('OTP transit routing unavailable, using mock transit fallback:', error);
-    return buildMockTransitRoute(origin, destination);
+    let fallbackReason = 'otp-request-failed';
+    if (error?.name === 'AbortError') {
+      fallbackReason = 'otp-timeout';
+    } else if (String(error?.message || '').startsWith('otp-http-error')) {
+      fallbackReason = 'otp-http-error';
+    } else if (String(error?.message || '').includes('otp-no-itinerary')) {
+      fallbackReason = 'otp-no-itinerary';
+    }
+
+    return buildMockTransitRoute(origin, destination, {
+      reason: fallbackReason,
+      unavailable: true,
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -308,17 +348,19 @@ function normalizeRouteEstimate(raw) {
     legs,
     isScheduleAware: Boolean(raw?.isScheduleAware),
     isMock: Boolean(raw?.isMock),
+    unavailable: Boolean(raw?.unavailable),
+    notice: String(raw?.notice || '').trim(),
     transitLegs,
   };
 }
 
-export async function getRouteEstimate({ origin, destination, travelMethod = 'walk' }) {
+export async function getRouteEstimate({ origin, destination, travelMethod = 'walk', dateTime }) {
   if (!origin || !destination) {
     throw new Error('Origin and destination are required for route estimation.');
   }
 
   if (travelMethod === 'transit') {
-    return getTransitRouteEstimate({ origin, destination });
+    return getTransitRouteEstimate({ origin, destination, dateTime });
   }
 
   const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;

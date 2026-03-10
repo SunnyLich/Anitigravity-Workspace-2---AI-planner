@@ -1,7 +1,7 @@
 meta:
   project: TripOptimizer
   owner: Team
-  updated: 2026-03-09
+  updated: 2026-03-10
   statusLegend:
     DONE: Implemented and usable
     PARTIAL: Foundation exists, incomplete workflow
@@ -10,7 +10,7 @@ meta:
 workstreams:
   - id: location-model
     name: Location model normalization
-    status: PARTIAL
+    status: DONE
     owner: Team
     priority: P1
     notes: Core normalization/dedupe, schema extension for opening-rules metadata, and backward-compatibility field adapter hardening are implemented in src/utils/locationModel.js.
@@ -32,7 +32,7 @@ workstreams:
     status: DONE
     owner: Team
     priority: P2
-    notes: Create/use/rename/delete and localStorage persistence implemented.
+    notes: Create/use/rename/delete, localStorage persistence, inline click-to-edit name/note cards (with default note placeholder), and set-start/set-destination actions that add saved nodes to trip locations are implemented.
   - id: local-search
     name: Local-first search
     status: DONE
@@ -56,23 +56,43 @@ workstreams:
     status: DONE
     owner: Team
     priority: P2
-    notes: Trip list, method, selected endpoints, and custom nodes restore on refresh.
+    notes: Trip/session state including saved locations persists in browser localStorage and restores on app load; workspace-root file persistence was intentionally dropped.
+    milestones:
+      - id: SP1
+        title: Browser session persistence for trip and custom nodes
+        state: DONE
+      - id: SP2
+        title: Restore saved locations from browser storage on startup
+        state: DONE
   - id: settings-help
     name: Settings and help UX
     status: DONE
     owner: Team
     priority: P2
-    notes: In-app settings/help windows are available from the dock with quick usage guidance.
+    notes: Settings are actionable for Time Constrained Mode, Help panel has been removed, break-time is wired into optimization, and daily-availability controls are now centralized in Settings.
+    milestones:
+      - id: SH1
+        title: Add settings/help windows and dock wiring
+        state: DONE
+      - id: SH2
+        title: Replace help with actionable settings controls
+        state: DONE
+      - id: SH3
+        title: Add per-stop break-time control in Time Constrained Mode settings
+        state: DONE
+      - id: SH4
+        title: Move daily availability controls from trip form to settings
+        state: DONE
   - id: opening-hours-optimizer
     name: Opening-hours-aware optimization
-    status: PARTIAL
+    status: DONE
     owner: Team
     priority: P0
-    notes: Baseline parsing, compatibility adapter, feasibility-aware solver output, itinerary status badges/unscheduled section, and trip-form opening-hours editor controls are implemented; data-tuning work remains.
+    notes: Baseline parsing, compatibility adapter, feasibility-aware solver output, itinerary status badges/unscheduled section, trip-form opening-hours editor controls, London POI data tuning, and provenance clarity between real source hours and fallback/user-edited values are implemented.
     milestones:
       - id: OH1
         title: Data model adapter and time helpers
-        state: PARTIAL
+        state: DONE
       - id: OH2
         title: Feasibility-aware solver output
         state: DONE
@@ -85,13 +105,16 @@ workstreams:
       - id: OH5
         title: Real-data tuning on London POI samples
         state: DONE
+      - id: OH6
+        title: Opening-hours provenance and placeholder-status visibility
+        state: DONE
     definitionOfDone:
       - Optimizer never schedules visits outside opening windows.
       - Unschedulable stops are explicit and actionable.
       - Existing saved locations remain backward-compatible.
   - id: priority-budget-optimizer
     name: Max-priority within time budget
-    status: PARTIAL
+    status: DONE
     owner: Team
     priority: P0
     notes: Mode toggle, budget input, per-location priority controls, priority-first seed selection, initial-travel accounting for seeded-first stops, first-leg travel visibility in itinerary, DFS/backtracking with pruning search, strict output budget capping, and improved dropped-stop reasons are implemented.
@@ -111,10 +134,10 @@ workstreams:
       - Existing shortest-feasible mode remains regression-safe.
   - id: real-transit
     name: Real transit routing integration
-    status: PARTIAL
+    status: DONE
     owner: Team
     priority: P2
-    notes: Provider selected as OpenTripPlanner (OTP); transit work deferred to lower priority while opening-hours and budget optimizer workstreams take precedence.
+    notes: Provider selected as OpenTripPlanner (OTP); transit branch wiring, transit detail rendering, and graceful unavailable-state messaging are in place.
     milestones:
       - id: TR1
         title: Provider comparison and decision
@@ -124,13 +147,13 @@ workstreams:
         state: DONE
       - id: TR3
         title: Integrate transit branch without walk/car regressions
-        state: PARTIAL
+        state: DONE
       - id: TR4
         title: Transit-specific itinerary details in UI
-        state: TODO
+        state: DONE
       - id: TR5
         title: Graceful fallback and unavailable-state messaging
-        state: TODO
+        state: DONE
     definitionOfDone:
       - Transit mode uses schedule-aware provider data in non-mock mode.
       - Output includes multi-leg path and schedule-aware ETA.

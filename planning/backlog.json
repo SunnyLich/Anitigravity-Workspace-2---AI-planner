@@ -1,7 +1,7 @@
 {
   "meta": {
     "project": "TripOptimizer",
-    "updated": "2026-03-09",
+    "updated": "2026-03-10",
     "source": "Migrated from PROJECT_TRACKER and PROJECT_TRACKER_SYSTEMATIC"
   },
   "items": [
@@ -97,6 +97,20 @@
       ]
     },
     {
+      "id": "OH-006",
+      "title": "Expose opening-hours provenance and placeholder status",
+      "workstream": "opening-hours-optimizer",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "Each location shows whether hours came from POI source data, user edit, or fallback/default",
+        "Locations without trustworthy source hours are labeled clearly instead of appearing fully authoritative",
+        "Time-constrained optimization still works with the clarified provenance model"
+      ]
+    },
+    {
       "id": "PB-001",
       "title": "Enforce strict budget cap in priority mode",
       "workstream": "priority-budget-optimizer",
@@ -170,9 +184,28 @@
       "title": "Wire transit branch into routing flow",
       "workstream": "real-transit",
       "priority": "P2",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Transit route estimation receives trip schedule date/time context",
+        "Planner route panel renders transit-specific details when transit legs are available",
+        "Walk and car route estimation behavior remains unchanged"
+      ]
+    },
+    {
+      "id": "TR-005",
+      "title": "Graceful transit fallback and unavailable messaging",
+      "workstream": "real-transit",
+      "priority": "P2",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Transit fallback responses include user-readable notice messages",
+        "Unavailable provider states are surfaced clearly in planner UI",
+        "Fallback behavior remains non-breaking and returns usable route estimates"
+      ]
     },
     {
       "id": "ROUTE-001",
@@ -238,6 +271,49 @@
       ]
     },
     {
+      "id": "UX-004",
+      "title": "Replace settings/help with actionable Time Constrained settings",
+      "workstream": "settings-help",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "Help window is removed from the dock flow",
+        "Settings window includes actionable controls instead of static guidance blocks",
+        "Settings includes per-stop break-time input used by optimization flow"
+      ]
+    },
+    {
+      "id": "UX-005",
+      "title": "Move daily availability controls from Trip Form to Settings",
+      "workstream": "settings-help",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Wake/sleep (daily availability) controls are removed from Trip Form UI",
+        "Daily availability controls are available under Time Constrained Mode settings",
+        "Existing persistence for wake/sleep values remains regression-safe"
+      ]
+    },
+    {
+      "id": "SP-001",
+      "title": "Persist saved locations in workspace folder and load on startup",
+      "workstream": "session-persistence",
+      "priority": "P1",
+      "status": "superseded",
+      "estimate": "L",
+      "owner": "unassigned",
+      "notes": "Superseded by product decision to use browser-only persistence for saved locations instead of workspace root file writes.",
+      "acceptance": [
+        "Saved locations are read from a designated workspace data folder at app startup",
+        "Save/edit/delete operations update the same folder-backed data source",
+        "When folder-backed persistence is unavailable, user sees a clear fallback/limitation message"
+      ]
+    },
+    {
       "id": "CF-001",
       "title": "Fix priority-mode add-order bias",
       "workstream": "priority-budget-optimizer",
@@ -287,6 +363,34 @@
       "acceptance": [
         "Priority mode can favor two feasible lower-priority stops over one high-priority stop when combined value is better",
         "Selection remains constrained by opening windows and time budget"
+      ]
+    },
+    {
+      "id": "UX-006",
+      "title": "Inline edit saved-location name and note in cards",
+      "workstream": "custom-nodes",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Saved-location cards display each location note directly in the card",
+        "Name and note are edited by clicking the text directly instead of using a separate edit button",
+        "Cards show a muted default note placeholder when no custom note exists so users can add one later"
+      ]
+    },
+    {
+      "id": "UX-007",
+      "title": "Set start/destination from saved nodes adds to trip",
+      "workstream": "custom-nodes",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Choosing Set Start from a saved-location card also adds that location to trip locations if missing",
+        "Choosing Set Destination from a saved-location card also adds that location to trip locations if missing",
+        "Existing dedupe behavior prevents duplicate trip entries"
       ]
     }
   ]

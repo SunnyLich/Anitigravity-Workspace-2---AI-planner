@@ -111,6 +111,19 @@ const formatStatusReason = (statusReason) => {
     return labels[normalized] || normalized.replace(/-/g, ' ');
 };
 
+const getOpeningHoursProvenance = (location) => {
+    const source = String(location?.metadata?.openingHoursSource || '').trim();
+    const labels = {
+        'openingHours-object': { text: 'Source hours', isPlaceholder: false },
+        'openingRules-derived': { text: 'Source rules', isPlaceholder: false },
+        'hours-text': { text: 'Parsed source text', isPlaceholder: false },
+        'user-edit': { text: 'User edited hours', isPlaceholder: false },
+        'default-fallback': { text: 'Placeholder default hours', isPlaceholder: true },
+    };
+
+    return labels[source] || { text: 'Unknown hours source', isPlaceholder: true };
+};
+
 const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, isOpen, onClose, onMinimize }) => {
     const absoluteTimeline = asAbsoluteTimeline(itinerary || []);
     const firstDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[0].arrivalAbs) : 0;
@@ -303,6 +316,14 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                         <h4 className="font-bold text-sm truncate">{item.name.split(',')[0]}</h4>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2 " >
+                                        {(() => {
+                                            const provenance = getOpeningHoursProvenance(item);
+                                            return (
+                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${provenance.isPlaceholder ? 'bg-warning/10 text-warning' : 'bg-white/5 text-text-muted'}`}>
+                                                    {provenance.text}
+                                                </span>
+                                            );
+                                        })()}
                                         <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 mr-1">
                                             <Clock size={10} />
                                             Time
@@ -355,6 +376,14 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                 {itinerary.unscheduledStops.map((item, idx) => (
                                     <div key={`unscheduled-${item.id || idx}`} className="bg-white/5 rounded-lg px-2.5 py-2">
                                         <p className="text-xs font-bold truncate">{item.name || 'Unnamed stop'}</p>
+                                        {(() => {
+                                            const provenance = getOpeningHoursProvenance(item);
+                                            return (
+                                                <p className={`text-[10px] font-bold ${provenance.isPlaceholder ? 'text-warning' : 'text-text-muted'}`}>
+                                                    {provenance.text}
+                                                </p>
+                                            );
+                                        })()}
                                         <p className="text-[10px] text-text-muted font-bold">
                                             {formatStatusReason(item.statusReason)}
                                         </p>
