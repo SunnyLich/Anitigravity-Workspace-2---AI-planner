@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-03-10
+- Replaced priority-budget solver greedy lookahead with DFS/backtracking search plus pruning.
+- Added optimistic upper-bound pruning and visited-state memoization to reduce branch exploration cost.
+- Priority mode now records `searchStrategy: dfs-backtracking-pruning` in solver metadata for easier verification.
+- Added strict post-search budget capping so returned priority itineraries cannot exceed budget even if a search path overflows.
+- Overflow candidates are now labeled `exceeds-time-budget`, and budget metadata reflects the capped itinerary.
+- Improved dropped-stop reason quality by distinguishing generic budget overflow from budget overflow caused by opening-hours waiting.
+- Itinerary reason labels now include: `Exceeds budget after waiting for opening hours`.
+- Trip location cards now show opening hours on a dedicated line (not muted) and include inline editable open/close time controls.
+- Backlog tracking sync: marked `UX-001` as done to reflect existing travel-method active-state UI styling.
+- Transit remains deferred/lower-priority (`TR-004` still todo) per current planning direction.
+- Marked `ROUTE-001` as `superseded` after deciding to keep Mapbox-based routing instead of implementing OSRM fallback.
+- Planning sync: updated `PB2` milestone in `planning/workstreams.yaml` to `DONE` to match shipped dropped-stop reason improvements.
+- Tuned opening-hours parsing against London POI samples: now accepts `24:00` and additional range separators (`-`, en-dash, `to`) when deriving normalized `openingHours`.
+- Implemented weighted fuzzy local search scoring with stronger field-aware weights and token-similarity matching to better handle minor misspellings.
+- Extended normalized location schema with opening-hours provenance metadata (`openingHoursSource`, opening-rules day coverage, source metadata) while preserving backward compatibility.
+- Hardened backward compatibility normalization by mapping legacy location fields (opening hours aliases, duration/priority aliases, and description note fallback) into the unified schema.
+- Added in-app Settings and Help windows, wired to dock controls, replacing the previous placeholder behavior.
+
 ## 2026-03-09
 - Split project tracker into focused planning artifacts under `docs/` and `planning/`.
 - Added `openingRules` compatibility adapter in location normalization.
@@ -16,6 +35,8 @@
 - Fixed priority-mode solver bias by selecting the initial stop from highest feasible priority instead of first-added order.
 - Fixed priority-mode schedule timing so first-stop arrival includes travel (and wait) from the first-location start anchor when a different stop is seeded first.
 - Itinerary UI now displays an explicit initial travel leg before the first stop when priority seeding starts at a different location.
+- Added opening-hours status visibility in itinerary UI: unscheduled section with reasons and conflict/status badges while preserving unscheduled metadata after timeline edits.
+- Updated priority-budget solver scoring with two-step lookahead so combined feasible value across multiple stops is considered, not only immediate single-stop gain.
 
 ## 2026-03-05
 - Added opening-hours-aware optimization implementation plan.

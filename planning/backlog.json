@@ -19,6 +19,33 @@
       ]
     },
     {
+      "id": "LM-001",
+      "title": "Extend location schema with opening metadata",
+      "workstream": "location-model",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Normalized locations include metadata fields for opening-hours provenance",
+        "Schema includes opening-rules coverage metadata without breaking existing consumers"
+      ]
+    },
+    {
+      "id": "LM-002",
+      "title": "Harden backward compatibility field adapter",
+      "workstream": "location-model",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Legacy fields map into normalized openingHours/openingHoursText and note fields",
+        "Legacy duration and priority aliases map to normalized duration and priority",
+        "Normalization remains safe for existing and new location payloads"
+      ]
+    },
+    {
       "id": "OH-002",
       "title": "Add feasibility-aware scheduling in TSPSolver",
       "workstream": "opening-hours-optimizer",
@@ -37,7 +64,7 @@
       "title": "Show wait/closed/unscheduled badges in itinerary UI",
       "workstream": "opening-hours-optimizer",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
       "owner": "unassigned"
     },
@@ -46,36 +73,70 @@
       "title": "Add trip-form opening-hours editor controls",
       "workstream": "opening-hours-optimizer",
       "priority": "P1",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Each trip location card shows opening-hours text on its own line",
+        "Opening start/end times are editable directly from the location card",
+        "Edited opening hours persist in trip-location state used by optimization"
+      ]
+    },
+    {
+      "id": "OH-005",
+      "title": "Tune opening-hours parsing against London POI data",
+      "workstream": "opening-hours-optimizer",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Parser accepts 24:00 end-times used by POI records",
+        "Parser accepts alternate range separators such as en-dash and 'to'",
+        "Normalized openingHours resolves more POIs from real dataset hours text"
+      ]
     },
     {
       "id": "PB-001",
       "title": "Enforce strict budget cap in priority mode",
       "workstream": "priority-budget-optimizer",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Priority-mode output itinerary is hard-capped to the configured time budget",
+        "Any overflow branch nodes are dropped with exceeds-time-budget reason",
+        "Solver metadata budgetUsed/budgetRemaining reflects strict capped output"
+      ]
     },
     {
       "id": "PB-002",
       "title": "Improve dropped-stop reason quality",
       "workstream": "priority-budget-optimizer",
       "priority": "P0",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Dropped stop reasons distinguish opening-window conflicts from time-budget overflow",
+        "Budget overflow after opening-hour waiting uses a dedicated status reason",
+        "Itinerary UI renders user-readable labels for the new status reason"
+      ]
     },
     {
       "id": "PB-003",
-      "title": "Add replace-move optimization pass",
+      "title": "Upgrade priority mode to DFS backtracking with pruning",
       "workstream": "priority-budget-optimizer",
       "priority": "P1",
-      "status": "todo",
+      "status": "done",
       "estimate": "L",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Priority mode explores multi-stop combinations using depth-first backtracking",
+        "Branch pruning limits search using optimistic priority bounds and visited-state memoization",
+        "Results remain budget and opening-window feasible"
+      ]
     },
     {
       "id": "TR-001",
@@ -118,36 +179,50 @@
       "title": "Replace mock road fallback with OSRM",
       "workstream": "routing-quality",
       "priority": "P1",
-      "status": "todo",
+      "status": "superseded",
       "estimate": "M",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "notes": "Superseded by product decision to keep Mapbox-based real routing path and avoid redundant OSRM integration."
     },
     {
       "id": "SEARCH-001",
       "title": "Add weighted fuzzy scoring for local search",
       "workstream": "search-quality",
       "priority": "P1",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Local ranking uses explicit weighted scoring by field (name/address/note)",
+        "Token-level fuzzy similarity improves tolerance to minor misspellings",
+        "Custom nodes retain ranking preference over equivalent POI matches"
+      ]
     },
     {
       "id": "UX-001",
       "title": "Improve travel-method active state visibility",
       "workstream": "planner-ux",
       "priority": "P1",
-      "status": "todo",
+      "status": "done",
       "estimate": "S",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Selected travel method uses a distinct high-contrast active style",
+        "Active method remains visually obvious versus inactive options"
+      ]
     },
     {
       "id": "UX-002",
       "title": "Add settings/help panel",
       "workstream": "planner-ux",
       "priority": "P2",
-      "status": "todo",
+      "status": "done",
       "estimate": "M",
-      "owner": "unassigned"
+      "owner": "unassigned",
+      "acceptance": [
+        "Settings and Help dock buttons open in-app windows",
+        "Panels include core routing, optimization, and usage guidance"
+      ]
     },
     {
       "id": "UX-003",
@@ -199,6 +274,19 @@
       "acceptance": [
         "Itinerary shows travel time before first stop when seeded first stop differs from start anchor",
         "User can visually confirm initial travel is accounted for"
+      ]
+    },
+    {
+      "id": "CF-004",
+      "title": "Add lookahead priority combination scoring",
+      "workstream": "priority-budget-optimizer",
+      "priority": "P0",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Priority mode can favor two feasible lower-priority stops over one high-priority stop when combined value is better",
+        "Selection remains constrained by opening windows and time budget"
       ]
     }
   ]

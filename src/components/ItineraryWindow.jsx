@@ -95,6 +95,22 @@ const formatTripDate = (dateValue) => {
     });
 };
 
+const formatStatusReason = (statusReason) => {
+    const normalized = String(statusReason || '').trim();
+    if (!normalized) return 'Unknown issue';
+
+    const labels = {
+        'duration-exceeds-opening-window': 'Visit duration exceeds opening window',
+        'cannot-finish-before-close': 'Cannot finish before close',
+        'opening-window-conflict': 'Outside opening hours',
+        'exceeds-time-budget': 'Exceeds time budget',
+        'exceeds-time-budget-after-opening-wait': 'Exceeds budget after waiting for opening hours',
+        'no-feasible-next-stop': 'No feasible sequence slot',
+    };
+
+    return labels[normalized] || normalized.replace(/-/g, ' ');
+};
+
 const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, isOpen, onClose, onMinimize }) => {
     const absoluteTimeline = asAbsoluteTimeline(itinerary || []);
     const firstDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[0].arrivalAbs) : 0;
@@ -170,6 +186,8 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
             };
         });
 
+        updated.unscheduledStops = itinerary?.unscheduledStops || [];
+
         onItineraryUpdate?.(updated);
     };
 
@@ -209,6 +227,8 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                 departureAbsoluteMinutes: shiftedDeparture,
             };
         });
+
+        updated.unscheduledStops = itinerary?.unscheduledStops || [];
 
         onItineraryUpdate?.(updated);
     };
@@ -317,11 +337,32 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                                 Wait: {item.waitTime}m
                                             </span>
                                         )}
+                                        {item.statusReason && (
+                                            <span className="bg-accent/10 text-accent px-2 py-0.5 rounded-md text-[10px] font-black">
+                                                {formatStatusReason(item.statusReason)}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                         </React.Fragment>
                     ))}
+
+                    {Array.isArray(itinerary.unscheduledStops) && itinerary.unscheduledStops.length > 0 && (
+                        <div className="glass-card p-3 border border-accent/30">
+                            <p className="text-[11px] font-black uppercase tracking-wider text-accent mb-2">Unscheduled Stops</p>
+                            <div className="space-y-2">
+                                {itinerary.unscheduledStops.map((item, idx) => (
+                                    <div key={`unscheduled-${item.id || idx}`} className="bg-white/5 rounded-lg px-2.5 py-2">
+                                        <p className="text-xs font-bold truncate">{item.name || 'Unnamed stop'}</p>
+                                        <p className="text-[10px] text-text-muted font-bold">
+                                            {formatStatusReason(item.statusReason)}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </WindowWrapper>

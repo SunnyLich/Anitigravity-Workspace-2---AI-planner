@@ -28,7 +28,8 @@ const LEGACY_DAY_ALIASES = {
   sunday: 'su',
 };
 
-const TIME_RANGE_REGEX = /([01]\d|2[0-3]):([0-5]\d)\s*-\s*([01]\d|2[0-3]):([0-5]\d)/;
+const TIME_TOKEN_REGEX = '(?:[01]\\d|2[0-3]):[0-5]\\d|24:00';
+const TIME_RANGE_REGEX = new RegExp(`(${TIME_TOKEN_REGEX})\\s*(?:-|\\u2013|to)\\s*(${TIME_TOKEN_REGEX})`, 'i');
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -52,10 +53,10 @@ function parseOpeningHoursText(text) {
   const match = normalized.match(TIME_RANGE_REGEX);
   if (!match) return null;
 
-  const [, startHour, startMinute, endHour, endMinute] = match;
+  const [, startTime, endTime] = match;
   return {
-    start: `${startHour}:${startMinute}`,
-    end: `${endHour}:${endMinute}`,
+    start: startTime,
+    end: endTime,
   };
 }
 
@@ -123,22 +124,53 @@ function deriveOpeningHoursFromRules(openingRules) {
   return null;
 }
 
-function resolveOpeningHours(raw, openingRules) {
+function resolveOpeningHoursAndSource(raw, openingRules) {
   if (isValidOpeningHours(raw?.openingHours)) {
-    return raw.openingHours;
+    return {
+      openingHours: {
+        start: String(raw.openingHours.start).trim(),
+        end: String(raw.openingHours.end).trim(),
+      },
+      openingHoursSource: 'openingHours-object',
+    };
   }
 
   const fromRules = deriveOpeningHoursFromRules(openingRules);
   if (fromRules) {
-    return fromRules;
+    return {
+      openingHours: fromRules,
+      openingHoursSource: 'openingRules-derived',
+    };
   }
 
   const parsedFromText = parseOpeningHoursText(raw?.hours || raw?.opening_hours || raw?.openingHoursText);
   if (parsedFromText) {
-    return parsedFromText;
+    return {
+      openingHours: parsedFromText,
+      openingHoursSource: 'hours-text',
+    };
   }
 
-  return DEFAULT_OPENING_HOURS;
+  return {
+    openingHours: DEFAULT_OPENING_HOURS,
+    openingHoursSource: 'default-fallback',
+  };
+}
+
+function buildLocationMetadata(raw, openingRules, openingHoursSource, openingHoursText) {
+  const tags = isPlainObject(raw?.tags) ? raw.tags : null;
+  const openingRuleCount = isPlainObject(openingRules?.days) ? Object.keys(openingRules.days).length : 0;
+
+  return {
+    type: String(raw?.type || tags?.amenity || tags?.tourism || tags?.leisure || '').trim(),
+    category: String(raw?.category || '').trim(),
+    website: String(raw?.website || tags?.website || '').trim(),
+    phone: String(raw?.phone || tags?.phone || '').trim(),
+    sourceRecordId: String(raw?.id || '').trim(),
+    openingHoursSource,
+    openingRulesDayCount: openingRuleCount,
+    hasOpeningHoursText: Boolean(String(openingHoursText || '').trim()),
+  };
 }
 
 function toNumber(value) {
@@ -179,26 +211,72 @@ function resolvePriority(raw, source) {
   return DEFAULT_VISIT_PRIORITY;
 }
 
+function adaptLegacyLocationShape(rawInput) {
+  const raw = isPlainObject(rawInput) ? { ...rawInput } : rawInput;
+  if (!raw || typeof raw !== 'object') return raw;
+
+  const legacyOpeningHours = raw.sourceOpeningHours;
+  const legacyStart = String(raw.startTime || raw.open || '').trim();
+  const legacyEnd = String(raw.endTime || raw.close || '').trim();
+  const hasLegacyRange = TIME_RANGE_REGEX.test(`${legacyStart}-${legacyEnd}`);
+
+  if (!raw.openingHours) {
+    if (isValidOpeningHours(legacyOpeningHours)) {
+      raw.openingHours = {
+        start: String(legacyOpeningHours.start).trim(),
+        end: String(legacyOpeningHours.end).trim(),
+      };
+    } else if (hasLegacyRange) {
+      raw.openingHours = {
+        start: legacyStart,
+        end: legacyEnd,
+      };
+    }
+  }
+
+  if (!raw.openingHoursText) {
+    raw.openingHoursText = String(raw.sourceOpeningHoursText || raw.hoursText || raw.openingHoursLabel || '').trim();
+  }
+
+  if (!Number.isFinite(Number(raw.duration)) && Number.isFinite(Number(raw.visitDurationMinutes))) {
+    raw.duration = Number(raw.visitDurationMinutes);
+  }
+
+  if (!Number.isFinite(Number(raw.priority)) && Number.isFinite(Number(raw.priorityLevel))) {
+    raw.priority = Number(raw.priorityLevel);
+  }
+
+  if (!raw.note && typeof raw.description === 'string') {
+    raw.note = raw.description;
+  }
+
+  return raw;
+}
+
 export function normalizeLocation(raw, source = 'external') {
   if (!raw) return null;
 
-  const lat = toNumber(raw.lat);
-  const lng = toNumber(raw.lng ?? raw.lon);
+  const adaptedRaw = adaptLegacyLocationShape(raw);
+
+  const lat = toNumber(adaptedRaw.lat);
+  const lng = toNumber(adaptedRaw.lng ?? adaptedRaw.lon);
 
   if (lat === null || lng === null) return null;
 
-  const name = (raw.name || raw.display_name || 'Unnamed location').trim();
-  const fallbackAddress = String(raw.display_name || '')
+  const name = (adaptedRaw.name || adaptedRaw.display_name || 'Unnamed location').trim();
+  const fallbackAddress = String(adaptedRaw.display_name || '')
     .split(',')
     .slice(1)
     .map(part => part.trim())
     .filter(Boolean)
     .join(', ');
-  const address = (raw.address || fallbackAddress || '').trim();
-  const id = raw.id ? buildId(source, raw.id) : buildId(source);
-  const openingHoursText = String(raw.hours || raw.opening_hours || raw.openingHoursText || '').trim();
-  const priority = resolvePriority(raw, source);
-  const openingRules = resolveOpeningRules(raw);
+  const address = (adaptedRaw.address || fallbackAddress || '').trim();
+  const id = adaptedRaw.id ? buildId(source, adaptedRaw.id) : buildId(source);
+  const openingHoursText = String(adaptedRaw.hours || adaptedRaw.opening_hours || adaptedRaw.openingHoursText || '').trim();
+  const priority = resolvePriority(adaptedRaw, source);
+  const openingRules = resolveOpeningRules(adaptedRaw);
+  const openingModel = resolveOpeningHoursAndSource(adaptedRaw, openingRules);
+  const metadata = buildLocationMetadata(adaptedRaw, openingRules, openingModel.openingHoursSource, openingHoursText);
 
   return {
     id,
@@ -206,15 +284,16 @@ export function normalizeLocation(raw, source = 'external') {
     address,
     lat,
     lng,
-    importance: Number.isFinite(Number(raw.importance)) ? Number(raw.importance) : 0,
+    importance: Number.isFinite(Number(adaptedRaw.importance)) ? Number(adaptedRaw.importance) : 0,
     source,
-    note: raw.note || '',
+    note: adaptedRaw.note || '',
     priority,
     userPriority: priority,
-    openingHours: resolveOpeningHours(raw, openingRules),
+    openingHours: openingModel.openingHours,
     openingRules,
     openingHoursText,
-    duration: Number.isFinite(raw.duration) ? raw.duration : 60,
+    metadata,
+    duration: Number.isFinite(adaptedRaw.duration) ? adaptedRaw.duration : 60,
   };
 }
 

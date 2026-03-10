@@ -13,14 +13,14 @@ workstreams:
     status: PARTIAL
     owner: Team
     priority: P1
-    notes: Core normalization/dedupe exists in src/utils/locationModel.js; advanced fields pending.
+    notes: Core normalization/dedupe, schema extension for opening-rules metadata, and backward-compatibility field adapter hardening are implemented in src/utils/locationModel.js.
     milestones:
       - id: LM1
         title: Extend schema for opening rules and metadata
-        state: TODO
+        state: DONE
       - id: LM2
         title: Add backward compatibility adapter
-        state: PARTIAL
+        state: DONE
   - id: map-context
     name: Map context actions
     status: DONE
@@ -59,16 +59,16 @@ workstreams:
     notes: Trip list, method, selected endpoints, and custom nodes restore on refresh.
   - id: settings-help
     name: Settings and help UX
-    status: PARTIAL
+    status: DONE
     owner: Team
     priority: P2
-    notes: Documentation exists; in-app settings/help panel missing.
+    notes: In-app settings/help windows are available from the dock with quick usage guidance.
   - id: opening-hours-optimizer
     name: Opening-hours-aware optimization
     status: PARTIAL
     owner: Team
     priority: P0
-    notes: Baseline parsing, compatibility adapter, and feasibility-aware solver output are implemented; UI/editor polishing remains.
+    notes: Baseline parsing, compatibility adapter, feasibility-aware solver output, itinerary status badges/unscheduled section, and trip-form opening-hours editor controls are implemented; data-tuning work remains.
     milestones:
       - id: OH1
         title: Data model adapter and time helpers
@@ -78,13 +78,13 @@ workstreams:
         state: DONE
       - id: OH3
         title: Itinerary badges and unscheduled section
-        state: TODO
+        state: DONE
       - id: OH4
         title: Trip-form opening-hours editor
-        state: TODO
+        state: DONE
       - id: OH5
         title: Real-data tuning on London POI samples
-        state: TODO
+        state: DONE
     definitionOfDone:
       - Optimizer never schedules visits outside opening windows.
       - Unschedulable stops are explicit and actionable.
@@ -94,17 +94,17 @@ workstreams:
     status: PARTIAL
     owner: Team
     priority: P0
-    notes: Mode toggle, budget input, per-location priority controls, priority-first seed selection, initial-travel accounting for seeded-first stops, and first-leg travel visibility in itinerary are implemented.
+    notes: Mode toggle, budget input, per-location priority controls, priority-first seed selection, initial-travel accounting for seeded-first stops, first-leg travel visibility in itinerary, DFS/backtracking with pruning search, strict output budget capping, and improved dropped-stop reasons are implemented.
     milestones:
       - id: PB1
         title: Tighten strict budget and opening-window constraints
-        state: TODO
+        state: DONE
       - id: PB2
         title: Improve dropped-stop reasoning quality
-        state: TODO
+        state: DONE
       - id: PB3
         title: Add replace/improvement loop under constraints
-        state: TODO
+        state: DONE
     definitionOfDone:
       - Budget and opening windows are always respected.
       - Priority score outperforms nearest-neighbor baseline under equal budget.

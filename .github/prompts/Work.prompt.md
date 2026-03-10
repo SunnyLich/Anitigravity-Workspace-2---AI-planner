@@ -67,13 +67,12 @@ Verification
 
 Project updates
 
-12. Update `planning/backlog.json` to reflect task status.
+12. Update `planning/backlog.json` to reflect task status and update `planning/workstreams.yaml` if milestone progress changed.
 13. If a current-focus item was resolved, remove it from `current-focus.md`.
-14. Update `planning/workstreams.yaml` if milestone progress changed.
 
 Completion
 
-15. Summarize the work completed.
-16. Write an entry to `docs/changelog.md`.
-17. Suggest the next 2–3 tasks from the backlog.
-18. Ask the user which task to work on next.
+14. Summarize the work completed.
+15. Write an entry to `docs/changelog.md`.
+16. Suggest the next 2–3 tasks from the backlog.
+17. Ask the user which task to work on next.

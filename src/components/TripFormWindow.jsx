@@ -198,6 +198,7 @@ const TripFormWindow = ({
     onTimeBudgetMinutesChange,
     onUpdateLocationPriority,
     onUpdateLocationDuration,
+    onUpdateLocationOpeningHours,
     onMinimize,
     routeEstimate,
     pois,
@@ -332,8 +333,8 @@ const TripFormWindow = ({
                     <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Optimization Mode</label>
                     <div className="flex bg-bg-deep p-1 rounded-xl border border-border-glass">
                         {[
-                            { key: 'shortest-feasible', label: 'Current Mode' },
-                            { key: 'time-constrained-fit', label: 'Time Constrained' },
+                            { key: 'shortest-feasible', label: 'Normal Mode' },
+                            { key: 'time-constrained-fit', label: 'Time Constrained Mode' },
                         ].map((mode) => (
                             <button
                                 key={mode.key}
@@ -530,6 +531,12 @@ const TripFormWindow = ({
                             <div key={loc.id} className="glass-card p-3">
                                 <div className="flex items-start gap-2">
                                     <div className="flex-1 min-w-0">
+                                        {(() => {
+                                            const openingStart = String(loc?.openingHours?.start || '09:00');
+                                            const openingEnd = String(loc?.openingHours?.end || '18:00');
+
+                                            return (
+                                                <>
                                         <div className="flex items-start gap-2 min-w-0">
                                             <p className="text-xs font-bold truncate flex-1 min-w-0" title={loc.name}>{loc.name}</p>
                                             {loc.address && (
@@ -539,15 +546,36 @@ const TripFormWindow = ({
                                             )}
                                         </div>
                                         {loc.note && <p className="text-[10px] text-text-muted truncate">{loc.note}</p>}
+                                        {/* <p className="mt-1 text-[11px] font-bold text-text-primary">
+                                            Opening Hours: {openingStart} - {openingEnd}
+                                        </p> */}
+                                        <div className="mt-1 flex items-center gap-2">
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-text-primary">Open</label>
+                                            <input
+                                                type="time"
+                                                value={openingStart}
+                                                onChange={(e) => onUpdateLocationOpeningHours(loc.id, 'start', e.target.value)}
+                                                className="w-[94px] bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold outline-none"
+                                                aria-label={`Opening start time for ${loc.name}`}
+                                            />
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-text-primary">Close</label>
+                                            <input
+                                                type="time"
+                                                value={openingEnd}
+                                                onChange={(e) => onUpdateLocationOpeningHours(loc.id, 'end', e.target.value)}
+                                                className="w-[94px] bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold outline-none"
+                                                aria-label={`Opening end time for ${loc.name}`}
+                                            />
+                                        </div>
                                         {isTimeConstrainedMode && (
                                             <div className="mt-2 flex items-center gap-2">
                                                 <label className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Duration(min)</label>
                                                 <input
                                                     type="number"
-                                                    min={5}
-                                                    max={360}
-                                                    step={5}
-                                                    value={Math.min(360, Math.max(5, Math.round(Number(loc.duration) || 60)))}
+                                                    min={1}
+                                                    max={1440}
+                                                    // step={5}
+                                                    value={Math.min(1440, Math.max(1, Math.round(Number(loc.duration) || 60)))}
                                                     onChange={(e) => onUpdateLocationDuration(loc.id, Number(e.target.value))}
                                                     className="w-[78px] bg-bg-deep border border-border-glass rounded-md px-2 py-1 text-[10px] font-bold outline-none"
                                                     aria-label={`Visit duration for ${loc.name}`}
@@ -565,6 +593,9 @@ const TripFormWindow = ({
                                                 </select>
                                             </div>
                                         )}
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                     <div className="shrink-0 flex items-center gap-1">
                                         <button

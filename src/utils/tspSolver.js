@@ -141,6 +141,19 @@ export class TSPSolver {
         };
     }
 
+    getBudgetOverflowReason(evaluated, remainingBudget) {
+        if (!evaluated?.isValid) return evaluated?.statusReason || 'opening-window-conflict';
+
+        const remaining = Math.max(0, Math.round(Number(remainingBudget) || 0));
+        if (evaluated.addedTime <= remaining) return null;
+
+        if (evaluated.waitTime > 0) {
+            return 'exceeds-time-budget-after-opening-wait';
+        }
+
+        return 'exceeds-time-budget';
+    }
+
     solveShortestFeasible() {
         if (this.locations.length === 0) return [];
 
@@ -240,141 +253,272 @@ export class TSPSolver {
 
         const budgetLimit = Math.max(1, Math.round(Number(timeBudgetMinutes) || 240));
         const startAnchor = this.locations[0];
-
-        let unvisited = [...this.locations];
-
-        // Priority mode should not depend on add-order for the first stop.
-        // Seed with the highest-priority feasible location at trip start.
-        let seedIndex = 0;
-        let seedScore = -Infinity;
-        const seedClockMinutes = this.timeToMinutes(this.startTime);
-
-        for (let i = 0; i < unvisited.length; i++) {
-            const candidate = unvisited[i];
-            const windowResult = this.alignArrivalToOpeningWindow(seedClockMinutes, candidate);
-            if (!windowResult.isValid) continue;
-
-            const priority = this.getPriority(candidate);
-            const waitPenalty = windowResult.wait * 0.01;
-            const score = priority - waitPenalty;
-
-            if (score > seedScore) {
-                seedScore = score;
-                seedIndex = i;
-            }
-        }
-
-        let currentPos = unvisited.splice(seedIndex, 1)[0];
         const tripStartMinutes = this.timeToMinutes(this.startTime);
-        let currentTime = tripStartMinutes;
+        const locations = [...this.locations];
 
-        const firstDuration = this.getDuration(currentPos);
-        const firstTravelMinutes = (startAnchor && currentPos && startAnchor.id !== currentPos.id)
-            ? this.getTravelTime(startAnchor, currentPos)
-            : 0;
-        const firstBaseArrival = tripStartMinutes + firstTravelMinutes;
-        const firstWindow = this.alignArrivalToOpeningWindow(firstBaseArrival, currentPos);
-        const firstArrivalMinutes = firstWindow.isValid ? firstWindow.arrival : firstBaseArrival;
-        const firstWaitMinutes = firstWindow.isValid ? firstWindow.wait : 0;
-        let budgetUsed = firstTravelMinutes + firstWaitMinutes + firstDuration;
+        const createStateKey = (currentPos, currentTime, budgetUsed, remaining) => {
+            const timeBucket = Math.floor(currentTime / 15);
+            const remainingIds = remaining.map((loc) => loc.id).sort().join('|');
+            return `${currentPos?.id || 'none'}::${timeBucket}::${Math.round(budgetUsed)}::${remainingIds}`;
+        };
 
-        const itinerary = [{
-            ...currentPos,
-            arrivalTime: this.minutesToTime(firstArrivalMinutes),
-            departureTime: this.minutesToTime(firstArrivalMinutes + firstDuration),
-            arrivalAbsoluteMinutes: firstArrivalMinutes,
-            departureAbsoluteMinutes: firstArrivalMinutes + firstDuration,
-            waitTime: firstWaitMinutes,
-            travelFromPrevious: firstTravelMinutes,
-            firstLegFromStart: firstTravelMinutes > 0,
-        }];
+        const getOptimisticPriorityBound = (remaining, remainingBudget) => {
+            if (remainingBudget <= 0 || remaining.length === 0) return 0;
 
-        currentTime = firstArrivalMinutes + firstDuration;
+            const sortedPriorities = remaining
+                .map((stop) => ({
+                    priority: this.getPriority(stop),
+                    minCost: Math.max(1, this.getDuration(stop)),
+                }))
+                .sort((a, b) => b.priority - a.priority);
 
-        while (unvisited.length > 0) {
-            let bestIndex = null;
-            let bestScore = -Infinity;
-            let bestEvaluated = null;
-            const candidateReasons = new Map();
+            let budget = remainingBudget;
+            let optimisticPriority = 0;
 
-            for (let i = 0; i < unvisited.length; i++) {
-                const candidate = unvisited[i];
+            for (let i = 0; i < sortedPriorities.length; i++) {
+                const item = sortedPriorities[i];
+                if (item.minCost > budget) continue;
+                optimisticPriority += item.priority;
+                budget -= item.minCost;
+                if (budget <= 0) break;
+            }
+
+            return optimisticPriority;
+        };
+
+        const isBetterSolution = (candidate, incumbent) => {
+            if (!incumbent) return true;
+            if (candidate.totalPriority !== incumbent.totalPriority) {
+                return candidate.totalPriority > incumbent.totalPriority;
+            }
+            if (candidate.path.length !== incumbent.path.length) {
+                return candidate.path.length > incumbent.path.length;
+            }
+            return candidate.budgetUsed < incumbent.budgetUsed;
+        };
+
+        const visitedStatePriority = new Map();
+        let best = null;
+
+        const dfs = (currentPos, currentTime, budgetUsed, totalPriority, remaining, path) => {
+            const partial = { totalPriority, budgetUsed, path };
+            if (isBetterSolution(partial, best)) {
+                best = {
+                    totalPriority,
+                    budgetUsed,
+                    path: [...path],
+                    currentPos,
+                    currentTime,
+                    remaining: [...remaining],
+                };
+            }
+
+            if (remaining.length === 0) return;
+
+            const remainingBudget = Math.max(0, budgetLimit - budgetUsed);
+            const optimisticUpperBound = totalPriority + getOptimisticPriorityBound(remaining, remainingBudget);
+            if (best && optimisticUpperBound < best.totalPriority) {
+                return;
+            }
+
+            const stateKey = createStateKey(currentPos, currentTime, budgetUsed, remaining);
+            const bestSeenPriority = visitedStatePriority.get(stateKey);
+            if (Number.isFinite(bestSeenPriority) && bestSeenPriority >= totalPriority) {
+                return;
+            }
+            visitedStatePriority.set(stateKey, totalPriority);
+
+            const moves = [];
+
+            for (let i = 0; i < remaining.length; i++) {
+                const candidate = remaining[i];
                 const evaluated = this.evaluateCandidate(currentPos, currentTime, candidate);
-                if (!evaluated?.isValid) {
-                    candidateReasons.set(candidate.id, evaluated?.statusReason || 'opening-window-conflict');
-                    continue;
-                }
+                if (!evaluated?.isValid) continue;
 
-                const projectedBudgetUse = budgetUsed + evaluated.addedTime;
-                if (projectedBudgetUse > budgetLimit) {
-                    candidateReasons.set(candidate.id, 'exceeds-time-budget');
-                    continue;
-                }
+                const projectedBudget = budgetUsed + evaluated.addedTime;
+                if (projectedBudget > budgetLimit) continue;
 
                 const priority = this.getPriority(candidate);
-                const valueDensity = priority / Math.max(1, evaluated.addedTime);
-                const tieBreaker = (priority * 0.05) - (evaluated.waitTime * 0.002);
-                const score = valueDensity + tieBreaker;
+                const score = (priority / Math.max(1, evaluated.addedTime)) - (evaluated.waitTime * 0.0005);
 
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestIndex = i;
-                    bestEvaluated = evaluated;
-                }
+                moves.push({
+                    index: i,
+                    candidate,
+                    evaluated,
+                    projectedBudget,
+                    projectedPriority: totalPriority + priority,
+                    score,
+                });
             }
 
-            if (bestIndex === null || !bestEvaluated) {
-                const unscheduledStops = unvisited.map((stop) => ({
-                    ...stop,
-                    statusReason: candidateReasons.get(stop.id) || 'no-feasible-next-stop',
-                }));
+            // Explore likely-strong branches first so pruning can cut more of the tree.
+            moves.sort((a, b) => b.score - a.score);
 
-                this.lastSolveMeta = {
-                    mode: 'max-priority-budget',
-                    budgetLimitMinutes: budgetLimit,
-                    budgetUsedMinutes: Math.round(budgetUsed),
-                    budgetRemainingMinutes: Math.max(0, Math.round(budgetLimit - budgetUsed)),
-                    completedCount: itinerary.length,
-                    droppedCount: unvisited.length,
-                    totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
-                    droppedStopIds: unvisited.map((stop) => stop.id),
-                    unscheduledStops,
-                };
-                itinerary.unscheduledStops = unscheduledStops;
+            for (let i = 0; i < moves.length; i++) {
+                const move = moves[i];
+                const nextRemaining = [
+                    ...remaining.slice(0, move.index),
+                    ...remaining.slice(move.index + 1),
+                ];
+
+                dfs(
+                    move.candidate,
+                    move.evaluated.arrival + move.evaluated.duration,
+                    move.projectedBudget,
+                    move.projectedPriority,
+                    nextRemaining,
+                    [...path, { node: move.candidate, evaluated: move.evaluated }]
+                );
+            }
+        };
+
+        for (let i = 0; i < locations.length; i++) {
+            const first = locations[i];
+            const firstTravelMinutes = (startAnchor && startAnchor.id !== first.id)
+                ? this.getTravelTime(startAnchor, first)
+                : 0;
+
+            const baseArrival = tripStartMinutes + firstTravelMinutes;
+            const firstWindow = this.alignArrivalToOpeningWindow(baseArrival, first);
+            if (!firstWindow.isValid) continue;
+
+            const firstDuration = this.getDuration(first);
+            const firstAddedTime = firstTravelMinutes + firstWindow.wait + firstDuration;
+            if (firstAddedTime > budgetLimit) continue;
+
+            const firstEvaluated = {
+                isValid: true,
+                travelTime: firstTravelMinutes,
+                waitTime: firstWindow.wait,
+                arrival: firstWindow.arrival,
+                duration: firstDuration,
+                addedTime: firstAddedTime,
+                statusReason: null,
+            };
+
+            const remaining = [
+                ...locations.slice(0, i),
+                ...locations.slice(i + 1),
+            ];
+
+            dfs(
+                first,
+                firstEvaluated.arrival + firstEvaluated.duration,
+                firstAddedTime,
+                this.getPriority(first),
+                remaining,
+                [{ node: first, evaluated: firstEvaluated }]
+            );
+        }
+
+        if (!best || best.path.length === 0) {
+            const unscheduledStops = locations.map((stop) => ({
+                ...stop,
+                statusReason: 'no-feasible-start-stop',
+            }));
+
+            this.lastSolveMeta = {
+                mode: 'max-priority-budget',
+                searchStrategy: 'dfs-backtracking-pruning',
+                budgetLimitMinutes: budgetLimit,
+                budgetUsedMinutes: 0,
+                budgetRemainingMinutes: budgetLimit,
+                completedCount: 0,
+                droppedCount: locations.length,
+                totalPriority: 0,
+                droppedStopIds: locations.map((stop) => stop.id),
+                unscheduledStops,
+            };
+
+            const empty = [];
+            empty.unscheduledStops = unscheduledStops;
+            return empty;
+        }
+
+        const acceptedPath = [];
+        const overflowPath = [];
+        let strictBudgetUsed = 0;
+
+        for (let i = 0; i < best.path.length; i++) {
+            const step = best.path[i];
+            const projectedBudget = strictBudgetUsed + step.evaluated.addedTime;
+
+            if (projectedBudget > budgetLimit) {
+                overflowPath.push(...best.path.slice(i));
                 break;
             }
 
-            const nextNode = unvisited.splice(bestIndex, 1)[0];
-            itinerary.push({
-                ...nextNode,
-                arrivalTime: this.minutesToTime(bestEvaluated.arrival),
-                departureTime: this.minutesToTime(bestEvaluated.arrival + bestEvaluated.duration),
-                arrivalAbsoluteMinutes: bestEvaluated.arrival,
-                departureAbsoluteMinutes: bestEvaluated.arrival + bestEvaluated.duration,
-                waitTime: bestEvaluated.waitTime,
-                travelFromPrevious: bestEvaluated.travelTime,
+            acceptedPath.push(step);
+            strictBudgetUsed = projectedBudget;
+        }
+
+        const itinerary = acceptedPath.map((step, index) => ({
+            ...step.node,
+            arrivalTime: this.minutesToTime(step.evaluated.arrival),
+            departureTime: this.minutesToTime(step.evaluated.arrival + step.evaluated.duration),
+            arrivalAbsoluteMinutes: step.evaluated.arrival,
+            departureAbsoluteMinutes: step.evaluated.arrival + step.evaluated.duration,
+            waitTime: step.evaluated.waitTime,
+            travelFromPrevious: step.evaluated.travelTime,
+            firstLegFromStart: index === 0 && step.evaluated.travelTime > 0,
+        }));
+
+        const scheduledIds = new Set(acceptedPath.map((step) => step.node.id));
+        const overflowIds = new Set(overflowPath.map((step) => step.node.id));
+        const hasScheduled = acceptedPath.length > 0;
+        const lastAcceptedStep = hasScheduled ? acceptedPath[acceptedPath.length - 1] : null;
+        const referencePos = hasScheduled ? lastAcceptedStep.node : startAnchor;
+        const referenceTime = hasScheduled
+            ? (lastAcceptedStep.evaluated.arrival + lastAcceptedStep.evaluated.duration)
+            : tripStartMinutes;
+
+        const unscheduledStops = locations
+            .filter((stop) => !scheduledIds.has(stop.id))
+            .map((stop) => {
+                if (overflowIds.has(stop.id)) {
+                    const overflowStep = overflowPath.find((step) => step.node.id === stop.id);
+                    const overflowReason = this.getBudgetOverflowReason(
+                        overflowStep?.evaluated,
+                        Math.max(0, budgetLimit - strictBudgetUsed)
+                    );
+
+                    return {
+                        ...stop,
+                        statusReason: overflowReason || 'exceeds-time-budget',
+                    };
+                }
+
+                const evaluated = this.evaluateCandidate(referencePos, referenceTime, stop);
+
+                let statusReason = 'not-selected-by-priority-search';
+                if (!evaluated?.isValid) {
+                    statusReason = evaluated?.statusReason || 'opening-window-conflict';
+                } else if ((strictBudgetUsed + evaluated.addedTime) > budgetLimit) {
+                    statusReason = this.getBudgetOverflowReason(
+                        evaluated,
+                        Math.max(0, budgetLimit - strictBudgetUsed)
+                    ) || 'exceeds-time-budget';
+                }
+
+                return {
+                    ...stop,
+                    statusReason,
+                };
             });
 
-            budgetUsed += bestEvaluated.addedTime;
-            currentTime = bestEvaluated.arrival + bestEvaluated.duration;
-            currentPos = nextNode;
-        }
-
-        if (!this.lastSolveMeta || this.lastSolveMeta.mode !== 'max-priority-budget') {
-            this.lastSolveMeta = {
-                mode: 'max-priority-budget',
-                budgetLimitMinutes: budgetLimit,
-                budgetUsedMinutes: Math.round(budgetUsed),
-                budgetRemainingMinutes: Math.max(0, Math.round(budgetLimit - budgetUsed)),
-                completedCount: itinerary.length,
-                droppedCount: unvisited.length,
-                totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
-                droppedStopIds: unvisited.map((stop) => stop.id),
-                unscheduledStops: [],
-            };
-            itinerary.unscheduledStops = [];
-        }
-
+        this.lastSolveMeta = {
+            mode: 'max-priority-budget',
+            searchStrategy: 'dfs-backtracking-pruning',
+            budgetLimitMinutes: budgetLimit,
+            budgetUsedMinutes: Math.round(strictBudgetUsed),
+            budgetRemainingMinutes: Math.max(0, Math.round(budgetLimit - strictBudgetUsed)),
+            completedCount: itinerary.length,
+            droppedCount: unscheduledStops.length,
+            totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
+            droppedStopIds: unscheduledStops.map((stop) => stop.id),
+            unscheduledStops,
+        };
+        itinerary.unscheduledStops = unscheduledStops;
         return itinerary;
     }
 

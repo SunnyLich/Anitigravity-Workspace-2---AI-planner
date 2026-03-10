@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Compass, Search, CalendarCheck, Settings, Info, MapPin } from 'lucide-react';
-import { TripFormWindow } from './components/TripFormWindow';
+import { TripFormWindow, WindowWrapper } from './components/TripFormWindow';
 import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
@@ -429,12 +429,31 @@ function App() {
   };
 
   const updateTripLocationDuration = (locationId, durationValue) => {
-    const normalizedDuration = Math.min(360, Math.max(5, Math.round(Number(durationValue) || 60)));
+    const normalizedDuration = Math.min(1440, Math.max(1, Math.round(Number(durationValue) || 60)));
     setLocations((prev) => prev.map((item) => (
       item.id === locationId
         ? { ...item, duration: normalizedDuration }
         : item
     )));
+  };
+
+  const updateTripLocationOpeningHours = (locationId, field, value) => {
+    if (!['start', 'end'].includes(field)) return;
+    const normalizedTime = TIME_INPUT_REGEX.test(String(value || '')) ? String(value) : null;
+    if (!normalizedTime) return;
+
+    setLocations((prev) => prev.map((item) => {
+      if (item.id !== locationId) return item;
+
+      const current = item?.openingHours || { start: '09:00', end: '18:00' };
+      return {
+        ...item,
+        openingHours: {
+          ...current,
+          [field]: normalizedTime,
+        },
+      };
+    }));
   };
 
   const updateCustomNode = (locationId, updates) => {
@@ -819,6 +838,7 @@ function App() {
             onTimeBudgetMinutesChange={setTimeBudgetMinutes}
             onUpdateLocationPriority={updateTripLocationPriority}
             onUpdateLocationDuration={updateTripLocationDuration}
+            onUpdateLocationOpeningHours={updateTripLocationOpeningHours}
             routeEstimate={routeEstimate}
             pois={pois}
             customNodes={customNodes}
@@ -855,6 +875,63 @@ function App() {
             onClose={() => toggleWindow('itinerary')}
             onMinimize={() => toggleWindow('itinerary')}
           />
+
+          {windows.settings && (
+          <WindowWrapper
+            title="Settings"
+            icon={Settings}
+            onClose={() => toggleWindow('settings')}
+            onMinimize={() => toggleWindow('settings')}
+            style={{ top: '140px', right: '20px', width: '360px', maxHeight: '70vh' }}
+          >
+            <div className="space-y-4 text-sm">
+              <div className="glass-card p-3">
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Routing</p>
+                <p className="mt-2 text-xs">Road routes use real Mapbox directions when configured, with a safe fallback path when unavailable.</p>
+              </div>
+              <div className="glass-card p-3">
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Optimization Modes</p>
+                <ul className="mt-2 space-y-1 text-xs text-text-muted">
+                  <li>Normal Mode: shortest feasible sequencing with opening-hour checks.</li>
+                  <li>Time Constrained Mode: maximizes value under trip timeframe budget.</li>
+                </ul>
+              </div>
+              <div className="glass-card p-3">
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Persistence</p>
+                <p className="mt-2 text-xs text-text-muted">Trip state, saved locations, endpoints, and time preferences persist locally in this browser.</p>
+              </div>
+            </div>
+          </WindowWrapper>
+          )}
+
+          {windows.info && (
+          <WindowWrapper
+            title="Help"
+            icon={Info}
+            onClose={() => toggleWindow('info')}
+            onMinimize={() => toggleWindow('info')}
+            style={{ top: '220px', right: '20px', width: '360px', maxHeight: '70vh' }}
+          >
+            <div className="space-y-4 text-sm">
+              <div className="glass-card p-3">
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Quick Start</p>
+                <ol className="mt-2 space-y-1 text-xs text-text-muted list-decimal list-inside">
+                  <li>Add at least two locations.</li>
+                  <li>Pick travel method and optimization mode.</li>
+                  <li>Click Optimize to generate itinerary and route.</li>
+                </ol>
+              </div>
+              <div className="glass-card p-3">
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Status Reasons</p>
+                <p className="mt-2 text-xs text-text-muted">Unscheduled stops include reasons such as opening-hour conflicts and time-budget overflow for easier tuning.</p>
+              </div>
+              <div className="glass-card p-3">
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Tips</p>
+                <p className="mt-2 text-xs text-text-muted">Edit per-stop duration, priority, and opening hours in the location list to improve fit quality.</p>
+              </div>
+            </div>
+          </WindowWrapper>
+          )}
         </div>
       </div>
 
@@ -875,13 +952,15 @@ function App() {
           <CalendarCheck size={22} />
         </div>
         <div
-          className="dock-item"
-          title="Settings (Coming Soon)"
+          className={`dock-item ${windows.settings ? 'active' : ''}`}
+          onClick={() => toggleWindow('settings')}
+          title="Settings"
         >
           <Settings size={22} />
         </div>
         <div
-          className="dock-item"
+          className={`dock-item ${windows.info ? 'active' : ''}`}
+          onClick={() => toggleWindow('info')}
           title="Help"
         >
           <Info size={22} />
