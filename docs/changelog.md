@@ -15,6 +15,7 @@
 - Enhanced `TSPSolver` feasibility handling to enforce opening-window completion and emit unscheduled stops with `statusReason` metadata.
 - Fixed priority-mode solver bias by selecting the initial stop from highest feasible priority instead of first-added order.
 - Fixed priority-mode schedule timing so first-stop arrival includes travel (and wait) from the first-location start anchor when a different stop is seeded first.
+- Itinerary UI now displays an explicit initial travel leg before the first stop when priority seeding starts at a different location.
 
 ## 2026-03-05
 - Added opening-hours-aware optimization implementation plan.

@@ -94,7 +94,7 @@ workstreams:
     status: PARTIAL
     owner: Team
     priority: P0
-    notes: Mode toggle, budget input, per-location priority controls, priority-first seed selection, and initial-travel accounting for seeded-first stops are implemented.
+    notes: Mode toggle, budget input, per-location priority controls, priority-first seed selection, initial-travel accounting for seeded-first stops, and first-leg travel visibility in itinerary are implemented.
     milestones:
       - id: PB1
         title: Tighten strict budget and opening-window constraints

@@ -264,6 +264,16 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                 </div>
                             )}
 
+                            {idx === 0 && item.firstLegFromStart && Number(item.travelFromPrevious) > 0 && (
+                                <div className="flex items-center gap-3 ml-4 my-1 opacity-70">
+                                    <div className="w-0.5 h-6 border-l border-dashed border-primary"></div>
+                                    <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                                        <Navigation size={12} className="text-primary" />
+                                        <span>{item.travelFromPrevious} min {travelMethod} from start</span>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="glass-card p-3 relative hover:border-primary/50 transition-all border border-transparent">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 min-w-0">
