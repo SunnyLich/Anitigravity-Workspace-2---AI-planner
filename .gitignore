@@ -16,6 +16,7 @@ dist-ssr
 # Local large/generated artifacts
 london ontario map.xml
 mermaid-diagram.png
+src/data/Transit/
 
 # Editor directories and files
 .vscode/*
