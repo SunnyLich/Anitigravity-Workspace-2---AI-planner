@@ -1,6 +1,29 @@
 # Changelog
 
+## 2026-03-11
+- Fixed itinerary map auto-zoom so routine clicks after a schedule exists no longer retrigger `fitBounds`; the map now recenters only when a new optimized schedule is generated, while direct focus actions still use targeted fly-to behavior.
+- Tracking sync: added and completed `UX-008` in `planning/backlog.json`.
+- Defaulted the OTP transit server to `http://localhost:8080/` when no env or browser override exists, and aligned the service plus Settings restore path so the effective base URL persists cleanly across reloads.
+- Reworked optimized itinerary transit segments into a single clickable summary with hover feedback, removed the inline redundant leg list, and added a popup transit-detail window that shows notices, timing, transfers, walk/wait totals, and per-leg stop detail.
+- Tracking sync: added and completed `TR-013` and `SH-005` in `planning/backlog.json`.
+- Fixed transit map rendering to decode and use OTP leg geometry polylines instead of drawing straight stop-to-stop chords through buildings when live OTP transit is available.
+- Fixed OTP transit fallback for OTP 2.9 deployments by adding GraphQL planner support and endpoint probing, while keeping legacy REST planner compatibility.
+- Clarified OTP transit configuration in Settings, README, and onboarding so testing works with either `http://localhost:8080` or `http://localhost:8080/otp` depending on deployment base path.
+
 ## 2026-03-10
+- Added runtime transit settings controls in Settings for mock transit and OTP base URL, persisted via browser storage and honored by the routing service at request time.
+- Tracking sync: added and completed `TR-012`, and marked `TR12` done in `planning/workstreams.yaml`.
+- Attached cached transit leg details to itinerary segments and rendered compact transit leg summaries plus fallback notices inside the itinerary window.
+- Tracking sync: marked `TR-010` done, marked `TR10` done in `planning/workstreams.yaml`, and returned `real-transit` to `DONE`.
+- Added a cached transit travel-time provider keyed by origin, destination, and departure-time bucket so optimization can reuse schedule-aware OTP results instead of refetching identical legs.
+- Converted `TSPSolver` and the optimize flow to use departure-aware async travel-time lookups, so transit optimization no longer relies on the previous flat-speed heuristic.
+- Documented OTP transit environment variables and a transit verification checklist in `README.md` and `docs/onboarding.md`.
+- Tracking sync: marked `TR-008`, `TR-009`, and `TR-011` done, and marked `TR8`, `TR9`, and `TR11` done in `planning/workstreams.yaml`.
+- Expanded the normalized transit route contract with departure/arrival timestamps, transfer count, walk/wait minutes, route labels, headsigns, stop IDs, and per-leg timing metadata while keeping existing route consumers backward-compatible.
+- Tracking sync: marked `TR-007` done, and marked `TR7` done in `planning/workstreams.yaml`.
+- Reopened `real-transit` to `PARTIAL` and added follow-on backlog items for visible planner transit UI, richer schedule metadata, schedule-aware optimization, itinerary leg rendering, and OTP operations/verification.
+- Restored the Trip Form route estimate panel so walk, car, and transit results are visible again, including transit notices and leg summaries.
+- Tracking sync: added and completed `TR-006`, and marked `TR6` done in `planning/workstreams.yaml`.
 - Set Start and Set Destination actions from saved-location cards now also add the selected saved location into the trip location list when missing.
 - Tracking sync: added and completed `UX-007` under `custom-nodes`.
 - Saved-location cards now show each location note directly, including a muted default placeholder when no note exists.

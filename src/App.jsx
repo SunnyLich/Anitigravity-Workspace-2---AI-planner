@@ -4,7 +4,7 @@ import { TripFormWindow, WindowWrapper } from './components/TripFormWindow';
 import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
-import { getRouteEstimate } from './services/mapboxRouting';
+import { createTransitTravelTimeCache, getRouteEstimate } from './services/mapboxRouting';
 import { reverseGeocodeLocation } from './services/nominatim';
 import { createCustomLocation, normalizeLocation } from './utils/locationModel';
 import { loadPoisFromFolder } from './utils/poiLoader';
@@ -22,9 +22,16 @@ const TRIP_END_DATE_STORAGE_KEY = 'tripoptimizer.tripEndDate';
 const WAKE_TIME_STORAGE_KEY = 'tripoptimizer.wakeTime';
 const SLEEP_TIME_STORAGE_KEY = 'tripoptimizer.sleepTime';
 const BREAK_TIME_STORAGE_KEY = 'tripoptimizer.breakTimeMinutes';
+const USE_MOCK_TRANSIT_STORAGE_KEY = 'tripoptimizer.useMockTransit';
+const OTP_BASE_URL_STORAGE_KEY = 'tripoptimizer.otpBaseUrl';
+const FALLBACK_OTP_BASE_URL = 'http://localhost:8080/';
 
 const LOCATION_KEY_PRECISION = 5;
 const TIME_INPUT_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const DEFAULT_USE_MOCK_TRANSIT = import.meta.env.VITE_USE_MOCK_TRANSIT !== 'false';
+const DEFAULT_OTP_BASE_URL = String(import.meta.env.VITE_OTP_BASE_URL || FALLBACK_OTP_BASE_URL).trim();
+
+const resolveOtpBaseUrl = (rawValue) => String(rawValue || '').trim() || DEFAULT_OTP_BASE_URL;
 
 const combineDateTime = (dateValue, timeValue) => {
   if (!dateValue || !TIME_INPUT_REGEX.test(String(timeValue || ''))) return null;
@@ -136,10 +143,13 @@ function App() {
   const [optimizerMode, setOptimizerMode] = useState('shortest-feasible');
   const [timeBudgetMinutes, setTimeBudgetMinutes] = useState(240);
   const [breakTimeMinutes, setBreakTimeMinutes] = useState(15);
+  const [useMockTransit, setUseMockTransit] = useState(DEFAULT_USE_MOCK_TRANSIT);
+  const [otpBaseUrl, setOtpBaseUrl] = useState(() => resolveOtpBaseUrl());
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [routeEstimate, setRouteEstimate] = useState(null);
   const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
   const [mapFocusTarget, setMapFocusTarget] = useState(null);
+  const [scheduleRecenterKey, setScheduleRecenterKey] = useState(0);
   const [selectedStartId, setSelectedStartId] = useState('');
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [customNodes, setCustomNodes] = useState([]);
@@ -220,6 +230,8 @@ function App() {
       const rawWakeTime = localStorage.getItem(WAKE_TIME_STORAGE_KEY);
       const rawSleepTime = localStorage.getItem(SLEEP_TIME_STORAGE_KEY);
       const rawBreakTimeMinutes = localStorage.getItem(BREAK_TIME_STORAGE_KEY);
+      const rawUseMockTransit = localStorage.getItem(USE_MOCK_TRANSIT_STORAGE_KEY);
+      const rawOtpBaseUrl = localStorage.getItem(OTP_BASE_URL_STORAGE_KEY);
 
       if (rawLocations) {
         const parsedLocations = JSON.parse(rawLocations);
@@ -269,6 +281,14 @@ function App() {
       if (Number.isFinite(Number(rawBreakTimeMinutes))) {
         const parsedBreak = Math.round(Number(rawBreakTimeMinutes));
         setBreakTimeMinutes(Math.min(180, Math.max(0, parsedBreak)));
+      }
+
+      if (rawUseMockTransit === 'true' || rawUseMockTransit === 'false') {
+        setUseMockTransit(rawUseMockTransit === 'true');
+      }
+
+      if (typeof rawOtpBaseUrl === 'string') {
+        setOtpBaseUrl(resolveOtpBaseUrl(rawOtpBaseUrl));
       }
 
       if (rawEndpoints) {
@@ -368,6 +388,22 @@ function App() {
       console.warn('Could not save break time:', error);
     }
   }, [breakTimeMinutes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(USE_MOCK_TRANSIT_STORAGE_KEY, String(useMockTransit));
+    } catch (error) {
+      console.warn('Could not save transit mock setting:', error);
+    }
+  }, [useMockTransit]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OTP_BASE_URL_STORAGE_KEY, resolveOtpBaseUrl(otpBaseUrl));
+    } catch (error) {
+      console.warn('Could not save OTP base URL:', error);
+    }
+  }, [otpBaseUrl]);
 
   useEffect(() => {
     try {
@@ -602,14 +638,32 @@ function App() {
     setRouteEstimate(null);
 
     setTimeout(async () => {
+      const routeStartDateTime = combineDateTime(requestedStartDate, requestedStartTime)?.toISOString();
+      const transitTravelCache = method === 'transit'
+        ? createTransitTravelTimeCache({ bucketMinutes: 15 })
+        : null;
+
       const solver = new TSPSolver(runLocations, {
         travelSpeed: method === 'car' ? 40 : method === 'transit' ? 20 : 5,
         bufferTime: Math.max(0, Math.round(Number(breakTimeMinutes) || 0)),
-        startTime: requestedStartTime || '09:00'
+        startTime: requestedStartTime || '09:00',
+        startDateTime: routeStartDateTime,
+        travelTimeProvider: transitTravelCache
+          ? async ({ origin, destination, departureDateTimeIso }) => {
+            if (!origin || !destination) return 0;
+            if (toLocationKey(origin) === toLocationKey(destination)) return 0;
+
+            return transitTravelCache.getTravelMinutes({
+              origin,
+              destination,
+              dateTime: departureDateTimeIso || routeStartDateTime || new Date().toISOString(),
+            });
+          }
+          : null,
       });
 
       try {
-        const result = solver.solve({
+        const result = await solver.solve({
           mode,
           timeBudgetMinutes: budget,
           tripStartDate: requestedStartDate,
@@ -617,14 +671,66 @@ function App() {
           tripStartTime: requestedStartTime,
           tripEndTime: requestedEndTime,
         });
-        setItinerary(result);
+
+        const itineraryWithTransitDetails = method === 'transit' && transitTravelCache
+          ? await Promise.all(result.map(async (item, index) => {
+            const previousStop = index > 0 ? result[index - 1] : null;
+            const startAnchor = runLocations[0];
+            const shouldUseStartAnchor = index === 0
+              && item.firstLegFromStart
+              && startAnchor
+              && toLocationKey(startAnchor) !== toLocationKey(item);
+
+            const legOrigin = shouldUseStartAnchor
+              ? startAnchor
+              : previousStop;
+
+            if (!legOrigin) {
+              return item;
+            }
+
+            const departureDateTimeIso = shouldUseStartAnchor
+              ? (routeStartDateTime || new Date().toISOString())
+              : (solver.getDateTimeForAbsoluteMinutes(previousStop?.departureAbsoluteMinutes) || routeStartDateTime || new Date().toISOString());
+
+            const transitEstimate = await transitTravelCache.getTravelEstimate({
+              origin: legOrigin,
+              destination: item,
+              dateTime: departureDateTimeIso,
+            });
+
+            return {
+              ...item,
+              transitFromPrevious: {
+                provider: transitEstimate.provider,
+                notice: transitEstimate.notice,
+                unavailable: transitEstimate.unavailable,
+                isScheduleAware: transitEstimate.isScheduleAware,
+                durationMinutes: transitEstimate.durationMinutes,
+                departureTimeIso: transitEstimate.departureTimeIso,
+                arrivalTimeIso: transitEstimate.arrivalTimeIso,
+                transferCount: transitEstimate.transferCount,
+                walkMinutes: transitEstimate.walkMinutes,
+                waitMinutes: transitEstimate.waitMinutes,
+                transitLegs: Array.isArray(transitEstimate.transitLegs) ? transitEstimate.transitLegs : [],
+              },
+            };
+          }))
+          : result;
+
+        if (Array.isArray(result?.unscheduledStops)) {
+          itineraryWithTransitDetails.unscheduledStops = result.unscheduledStops;
+        }
+
+        setItinerary(itineraryWithTransitDetails);
+        setScheduleRecenterKey((previous) => previous + 1);
         setWindows(prev => ({ ...prev, itinerary: true }));
 
-        if (result.length >= 2) {
-          const origin = result[0];
-          const destination = result[result.length - 1];
-          const middleStops = result.slice(1, -1);
-          const routeDateTime = combineDateTime(requestedStartDate, requestedStartTime)?.toISOString();
+        if (itineraryWithTransitDetails.length >= 2) {
+          const origin = itineraryWithTransitDetails[0];
+          const destination = itineraryWithTransitDetails[itineraryWithTransitDetails.length - 1];
+          const middleStops = itineraryWithTransitDetails.slice(1, -1);
+          const routeDateTime = routeStartDateTime;
 
           const routedEstimate = await getRouteEstimate({
             origin,
@@ -700,6 +806,7 @@ function App() {
           origin={selectedStartLocation || routeEndpoints.origin}
           destination={selectedDestinationLocation || routeEndpoints.destination}
           focusTarget={mapFocusTarget}
+          recenterTrigger={scheduleRecenterKey}
           customNodes={customNodes}
           pois={pois}
           onMapContextMenu={(payload) => {
@@ -981,6 +1088,38 @@ function App() {
                     ? 'Time Constrained Mode is active. Break time will affect schedule feasibility and budget usage.'
                     : 'Switch to Time Constrained Mode in Plan Trip to use these settings during optimization.'}
                 </p>
+              </div>
+              <div className="glass-card p-3">
+                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Transit Provider</p>
+                <div className="mt-2 space-y-3">
+                  <label className="flex items-center justify-between gap-3 rounded-xl border border-border-glass bg-white/5 px-3 py-2.5 cursor-pointer">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Use mock transit</p>
+                      <p className="text-[11px] text-text-muted">Disable this to query a real OTP server for schedule-aware transit data.</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={useMockTransit}
+                      onChange={(e) => setUseMockTransit(e.target.checked)}
+                      className="h-4 w-4 accent-primary"
+                      aria-label="Use mock transit"
+                    />
+                  </label>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">OTP base URL</label>
+                    <input
+                      type="url"
+                      value={otpBaseUrl}
+                      onChange={(e) => setOtpBaseUrl(e.target.value)}
+                      placeholder="http://localhost:8080 or http://localhost:8080/otp"
+                      className="w-full bg-bg-deep border border-border-glass rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                      spellCheck={false}
+                    />
+                    <p className="text-[11px] text-text-muted">
+                      Runtime override stored in browser storage. Use the OTP deployment base URL; the app appends the router path automatically. Current source: {useMockTransit ? 'mock transit enabled' : 'browser setting or default OTP URL'}
+                    </p>
+                  </div>
+                </div>
               </div>
               <div className="glass-card p-3">
                 <p className="text-xs font-black uppercase tracking-wider text-text-muted">Saved Locations Persistence</p>

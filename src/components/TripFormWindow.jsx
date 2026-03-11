@@ -821,34 +821,36 @@ const TripFormWindow = ({
                 </div>
 
                 {routeEstimate && (
-                    <div className="glass-card space-y-1">
-                        {routeEstimate.provider === 'error' ? (
-                            <p className="text-xs font-bold text-accent">{routeEstimate.message}</p>
-                        ) : (
-                            <>
+                    <div className="glass-card space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
                                 <p className="text-xs font-bold">Route estimate ({routeEstimate.provider})</p>
                                 <p className="text-[11px] text-text-muted">
                                     {routeEstimate.durationMinutes} min • {routeEstimate.distanceKm} km • {travelMethod}
                                 </p>
-                                {routeEstimate.notice && (
-                                    <p className={`text-[11px] font-semibold ${routeEstimate.unavailable ? 'text-accent' : 'text-text-muted'}`}>
-                                        {routeEstimate.notice}
+                            </div>
+                            {routeEstimate.isScheduleAware && (
+                                <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wide">
+                                    Live transit
+                                </span>
+                            )}
+                        </div>
+
+                        {routeEstimate.notice && (
+                            <p className={`text-[11px] font-semibold ${routeEstimate.unavailable ? 'text-accent' : 'text-text-muted'}`}>
+                                {routeEstimate.notice}
+                            </p>
+                        )}
+
+                        {Array.isArray(routeEstimate.transitLegs) && routeEstimate.transitLegs.length > 0 && (
+                            <div className="pt-1 space-y-1 border-t border-border-glass/70">
+                                {routeEstimate.transitLegs.slice(0, 4).map((leg, index) => (
+                                    <p key={`${leg.mode}-${index}`} className="text-[11px] text-text-muted">
+                                        {leg.mode}: {leg.durationMinutes} min
+                                        {leg.from && leg.to ? ` (${leg.from} -> ${leg.to})` : ''}
                                     </p>
-                                )}
-                                {routeEstimate.isScheduleAware && (
-                                    <p className="text-[11px] text-text-muted">Schedule-aware transit estimate</p>
-                                )}
-                                {Array.isArray(routeEstimate.transitLegs) && routeEstimate.transitLegs.length > 0 && (
-                                    <div className="pt-1 space-y-1">
-                                        {routeEstimate.transitLegs.slice(0, 4).map((leg, index) => (
-                                            <p key={`${leg.mode}-${index}`} className="text-[11px] text-text-muted">
-                                                {leg.mode}: {leg.durationMinutes} min
-                                                {leg.from && leg.to ? ` (${leg.from} -> ${leg.to})` : ''}
-                                            </p>
-                                        ))}
-                                    </div>
-                                )}
-                            </>
+                                ))}
+                            </div>
                         )}
                     </div>
                 )}

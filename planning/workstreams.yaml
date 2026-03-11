@@ -27,7 +27,7 @@ workstreams:
     owner: Team
     priority: P2
     notes: Start/Destination/Custom creation available.
-  - id: custom-nodes
+      notes: OTP provider selection, adapter wiring, fallback handling, visible planner route estimates, richer normalized schedule metadata, cached transit leg lookup, schedule-aware transit optimization, and OTP setup/verification docs are in place. The remaining transit gap is itinerary output that does not yet surface full transit leg detail between stops.
     name: Custom nodes workflow
     status: DONE
     owner: Team
@@ -48,8 +48,8 @@ workstreams:
   - id: endpoint-routing
     name: Explicit start/destination routing
     status: DONE
-    owner: Team
-    priority: P2
+            title: Expand normalized transit schedule detail model
+            state: DONE
     notes: Selector state wired into route estimation.
   - id: session-persistence
     name: Session persistence
@@ -136,8 +136,8 @@ workstreams:
     name: Real transit routing integration
     status: DONE
     owner: Team
-    priority: P2
-    notes: Provider selected as OpenTripPlanner (OTP); transit branch wiring, transit detail rendering, and graceful unavailable-state messaging are in place.
+    priority: P0
+    notes: OTP provider selection, adapter wiring, fallback handling, visible planner route estimates, richer normalized schedule metadata, cached transit leg lookup, schedule-aware transit optimization, itinerary transit leg rendering, OTP setup/verification docs, and runtime transit settings controls are in place.
     milestones:
       - id: TR1
         title: Provider comparison and decision
@@ -154,7 +154,29 @@ workstreams:
       - id: TR5
         title: Graceful fallback and unavailable-state messaging
         state: DONE
+      - id: TR6
+        title: Restore visible planner transit route panel
+        state: DONE
+      - id: TR7
+        title: Expand normalized transit schedule detail model
+        state: DONE
+      - id: TR8
+        title: Add cached transit leg cost provider for optimization
+        state: DONE
+      - id: TR9
+        title: Use schedule-aware transit costs in itinerary optimization
+        state: DONE
+      - id: TR10
+        title: Render transit leg summaries in itinerary output
+        state: DONE
+      - id: TR11
+        title: Document provider operations and verification flow
+        state: DONE
+      - id: TR12
+        title: Add runtime transit settings controls
+        state: DONE
     definitionOfDone:
       - Transit mode uses schedule-aware provider data in non-mock mode.
-      - Output includes multi-leg path and schedule-aware ETA.
+      - Planner and itinerary UI both surface multi-leg transit detail and fallback state.
+      - Transit itinerary optimization uses schedule-aware inter-stop costs instead of a flat speed heuristic.
       - Unavailable scenarios fail gracefully with clear messaging.

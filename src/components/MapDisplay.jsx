@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -17,14 +17,16 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Sub-component to fly to bounds when itinerary changes
-const RecenterMap = ({ points }) => {
+const RecenterMap = ({ points, trigger }) => {
     const map = useMap();
+
     useEffect(() => {
         if (points && points.length > 0) {
             const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]));
             map.fitBounds(bounds, { padding: [50, 50], animate: true });
         }
-    }, [points, map]);
+    }, [trigger, map, points]);
+
     return null;
 };
 
@@ -113,13 +115,20 @@ const MapDisplay = ({
     origin,
     destination,
     focusTarget,
+    recenterTrigger = 0,
     pois = [],
     customNodes = [],
     onMapContextMenu,
     onMapClick,
 }) => {
-    const points = itinerary.map(item => ({ lat: item.lat, lng: item.lng }));
-    const polylinePositions = points.map(p => [p.lat, p.lng]);
+    const points = useMemo(
+        () => itinerary.map(item => ({ lat: item.lat, lng: item.lng })),
+        [itinerary]
+    );
+    const polylinePositions = useMemo(
+        () => points.map(p => [p.lat, p.lng]),
+        [points]
+    );
     const hasRouteGeometry = Array.isArray(routeGeometry) && routeGeometry.length > 1;
     const routeSegmentCount = hasRouteGeometry ? routeGeometry.length - 1 : 0;
     const center = points.length > 0 ? [points[0].lat, points[0].lng] : LONDON_ON;
@@ -265,7 +274,7 @@ const MapDisplay = ({
             )}
 
             <FocusMapTarget target={focusTarget} />
-            <RecenterMap points={points} />
+            <RecenterMap points={points} trigger={recenterTrigger} />
         </MapContainer>
     );
 };

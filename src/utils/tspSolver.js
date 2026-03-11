@@ -9,6 +9,10 @@ export class TSPSolver {
         this.travelSpeed = options.travelSpeed || 5; // km/h for walking by default
         this.bufferTime = options.bufferTime || 15; // minutes between stops
         this.startTime = options.startTime || "09:00";
+        this.startDateTime = options.startDateTime || '';
+        this.travelTimeProvider = typeof options.travelTimeProvider === 'function'
+            ? options.travelTimeProvider
+            : null;
         this.lastSolveMeta = null;
     }
 
@@ -24,7 +28,37 @@ export class TSPSolver {
         return R * c;
     }
 
-    getTravelTime(p1, p2) {
+    getDateTimeForAbsoluteMinutes(absoluteMinutes) {
+        const parsed = new Date(this.startDateTime);
+        if (Number.isNaN(parsed.getTime())) return '';
+
+        const startMinutes = this.timeToMinutes(this.startTime);
+        if (!Number.isFinite(startMinutes) || !Number.isFinite(Number(absoluteMinutes))) {
+            return parsed.toISOString();
+        }
+
+        const deltaMinutes = Math.round(Number(absoluteMinutes) - startMinutes);
+        return new Date(parsed.getTime() + (deltaMinutes * 60000)).toISOString();
+    }
+
+    async getTravelTime(p1, p2, departureAbsoluteMinutes = null) {
+        if (this.travelTimeProvider) {
+            try {
+                const provided = await this.travelTimeProvider({
+                    origin: p1,
+                    destination: p2,
+                    departureAbsoluteMinutes,
+                    departureDateTimeIso: this.getDateTimeForAbsoluteMinutes(departureAbsoluteMinutes),
+                });
+
+                if (Number.isFinite(Number(provided))) {
+                    return Math.max(0, Math.round(Number(provided)));
+                }
+            } catch (error) {
+                console.warn('Falling back to heuristic travel time:', error);
+            }
+        }
+
         const distance = this.getDistance(p1, p2);
         return Math.round((distance / this.travelSpeed) * 60); // returns whole minutes
     }
@@ -110,8 +144,8 @@ export class TSPSolver {
         return Math.min(5, Math.max(1, Math.round(priority)));
     }
 
-    evaluateCandidate(currentPos, currentTime, candidate) {
-        const travelTime = this.getTravelTime(currentPos, candidate);
+    async evaluateCandidate(currentPos, currentTime, candidate) {
+        const travelTime = await this.getTravelTime(currentPos, candidate, currentTime);
         const baseArrival = currentTime + travelTime + this.bufferTime;
         const windowResult = this.alignArrivalToOpeningWindow(baseArrival, candidate);
 
@@ -154,7 +188,7 @@ export class TSPSolver {
         return 'exceeds-time-budget';
     }
 
-    solveShortestFeasible() {
+    async solveShortestFeasible() {
         if (this.locations.length === 0) return [];
 
         let unvisited = [...this.locations];
@@ -178,11 +212,12 @@ export class TSPSolver {
             let minCost = Infinity;
             let nextArrivalTime = 0;
             let nextWaitTime = 0;
+            let nextTravelTime = 0;
             const candidateReasons = new Map();
 
             for (let i = 0; i < unvisited.length; i++) {
                 const candidate = unvisited[i];
-                const evaluated = this.evaluateCandidate(currentPos, currentTime, candidate);
+                const evaluated = await this.evaluateCandidate(currentPos, currentTime, candidate);
 
                 if (evaluated?.isValid) {
                     // Cost function: travel time + wait time (greedy)
@@ -192,6 +227,7 @@ export class TSPSolver {
                         bestNext = i;
                         nextArrivalTime = evaluated.arrival;
                         nextWaitTime = evaluated.waitTime;
+                        nextTravelTime = evaluated.travelTime;
                     }
                 } else if (evaluated?.statusReason) {
                     candidateReasons.set(candidate.id, evaluated.statusReason);
@@ -227,7 +263,7 @@ export class TSPSolver {
                 arrivalAbsoluteMinutes: nextArrivalTime,
                 departureAbsoluteMinutes: nextArrivalTime + nextDuration,
                 waitTime: nextWaitTime,
-                travelFromPrevious: this.getTravelTime(currentPos, nextNode)
+                travelFromPrevious: nextTravelTime
             });
 
             currentTime = nextArrivalTime + nextDuration;
@@ -248,7 +284,7 @@ export class TSPSolver {
         return itinerary;
     }
 
-    solveMaxPriorityWithinBudget(timeBudgetMinutes = 240) {
+    async solveMaxPriorityWithinBudget(timeBudgetMinutes = 240) {
         if (this.locations.length === 0) return [];
 
         const budgetLimit = Math.max(1, Math.round(Number(timeBudgetMinutes) || 240));
@@ -300,7 +336,7 @@ export class TSPSolver {
         const visitedStatePriority = new Map();
         let best = null;
 
-        const dfs = (currentPos, currentTime, budgetUsed, totalPriority, remaining, path) => {
+        const dfs = async (currentPos, currentTime, budgetUsed, totalPriority, remaining, path) => {
             const partial = { totalPriority, budgetUsed, path };
             if (isBetterSolution(partial, best)) {
                 best = {
@@ -332,7 +368,7 @@ export class TSPSolver {
 
             for (let i = 0; i < remaining.length; i++) {
                 const candidate = remaining[i];
-                const evaluated = this.evaluateCandidate(currentPos, currentTime, candidate);
+                const evaluated = await this.evaluateCandidate(currentPos, currentTime, candidate);
                 if (!evaluated?.isValid) continue;
 
                 const projectedBudget = budgetUsed + evaluated.addedTime;
@@ -361,7 +397,7 @@ export class TSPSolver {
                     ...remaining.slice(move.index + 1),
                 ];
 
-                dfs(
+                await dfs(
                     move.candidate,
                     move.evaluated.arrival + move.evaluated.duration,
                     move.projectedBudget,
@@ -375,7 +411,7 @@ export class TSPSolver {
         for (let i = 0; i < locations.length; i++) {
             const first = locations[i];
             const firstTravelMinutes = (startAnchor && startAnchor.id !== first.id)
-                ? this.getTravelTime(startAnchor, first)
+                ? await this.getTravelTime(startAnchor, first, tripStartMinutes)
                 : 0;
 
             const baseArrival = tripStartMinutes + firstTravelMinutes;
@@ -401,7 +437,7 @@ export class TSPSolver {
                 ...locations.slice(i + 1),
             ];
 
-            dfs(
+            await dfs(
                 first,
                 firstEvaluated.arrival + firstEvaluated.duration,
                 firstAddedTime,
@@ -472,9 +508,9 @@ export class TSPSolver {
             ? (lastAcceptedStep.evaluated.arrival + lastAcceptedStep.evaluated.duration)
             : tripStartMinutes;
 
-        const unscheduledStops = locations
+        const unscheduledStops = await Promise.all(locations
             .filter((stop) => !scheduledIds.has(stop.id))
-            .map((stop) => {
+            .map(async (stop) => {
                 if (overflowIds.has(stop.id)) {
                     const overflowStep = overflowPath.find((step) => step.node.id === stop.id);
                     const overflowReason = this.getBudgetOverflowReason(
@@ -488,7 +524,7 @@ export class TSPSolver {
                     };
                 }
 
-                const evaluated = this.evaluateCandidate(referencePos, referenceTime, stop);
+                const evaluated = await this.evaluateCandidate(referencePos, referenceTime, stop);
 
                 let statusReason = 'not-selected-by-priority-search';
                 if (!evaluated?.isValid) {
@@ -504,7 +540,7 @@ export class TSPSolver {
                     ...stop,
                     statusReason,
                 };
-            });
+            }));
 
         this.lastSolveMeta = {
             mode: 'max-priority-budget',
@@ -522,10 +558,13 @@ export class TSPSolver {
         return itinerary;
     }
 
-    solve(options = {}) {
+    async solve(options = {}) {
         const mode = options?.mode || 'shortest-feasible';
         const startTime = options?.tripStartTime || this.startTime;
         this.startTime = startTime;
+        if (options?.tripStartDate && options?.tripStartTime) {
+            this.startDateTime = `${options.tripStartDate}T${options.tripStartTime}:00`;
+        }
 
         if (mode === 'time-constrained-fit') {
             const budget = this.getTimeframeBudgetMinutes(options?.tripStartTime, options?.tripEndTime, options?.timeBudgetMinutes);

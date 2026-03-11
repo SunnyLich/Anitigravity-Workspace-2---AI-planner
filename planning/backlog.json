@@ -208,6 +208,104 @@
       ]
     },
     {
+      "id": "TR-006",
+      "title": "Restore visible planner route panel for transit estimates",
+      "workstream": "real-transit",
+      "priority": "P0",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Trip form visibly renders route estimate details again when a route is available",
+        "Transit estimates show provider, schedule-aware status, notices, and up to four transit legs",
+        "Walk and car estimate rendering remains intact"
+      ]
+    },
+    {
+      "id": "TR-007",
+      "title": "Expand normalized transit response with schedule metadata",
+      "workstream": "real-transit",
+      "priority": "P0",
+        "status": "done",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "Normalized transit results include transfer/wait/walk metadata needed by planner and itinerary UI",
+        "Transit leg payload preserves route labels and stop names where provider data supplies them",
+        "Existing walk/car route estimate consumers remain backward-compatible"
+      ]
+    },
+    {
+      "id": "TR-008",
+      "title": "Add cached transit leg cost provider for optimization",
+      "workstream": "real-transit",
+      "priority": "P0",
+      "status": "done",
+      "estimate": "L",
+      "owner": "unassigned",
+      "acceptance": [
+        "Optimization flow can request transit travel cost between arbitrary stop pairs at a departure time",
+        "Transit leg requests are cached to avoid redundant provider calls within one optimization run",
+        "Provider failure returns a safe degraded result instead of breaking optimization"
+      ]
+    },
+    {
+      "id": "TR-009",
+      "title": "Use schedule-aware transit costs in itinerary optimization",
+      "workstream": "real-transit",
+      "priority": "P0",
+      "status": "done",
+      "estimate": "L",
+      "owner": "unassigned",
+      "acceptance": [
+        "Transit optimization no longer relies on a flat transit speed heuristic",
+        "Inter-stop travel times reflect requested departure time and provider itinerary results",
+        "Walk and car optimization behavior remains regression-safe"
+      ]
+    },
+    {
+      "id": "TR-010",
+      "title": "Render transit leg summaries in itinerary window",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "Transit itineraries show per-leg mode and origin/destination labels between stops",
+        "Fallback and unavailable states remain understandable in itinerary output",
+        "Non-transit itinerary rendering is unchanged"
+      ]
+    },
+    {
+      "id": "TR-011",
+      "title": "Document OTP environment, operations, and transit verification flow",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "README or onboarding docs describe transit-specific environment variables",
+        "Docs capture OTP availability expectations, timeout behavior, and fallback behavior",
+        "Verification steps cover OTP success, timeout, and no-itinerary scenarios"
+      ]
+    },
+    {
+      "id": "TR-012",
+      "title": "Add runtime transit settings controls",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Settings window includes a mock transit toggle that changes runtime routing behavior",
+        "Settings window includes an OTP base URL input persisted in browser storage",
+        "Transit service honors settings overrides without requiring code changes"
+      ]
+    },
+    {
       "id": "ROUTE-001",
       "title": "Replace mock road fallback with OSRM",
       "workstream": "routing-quality",
@@ -391,6 +489,48 @@
         "Choosing Set Start from a saved-location card also adds that location to trip locations if missing",
         "Choosing Set Destination from a saved-location card also adds that location to trip locations if missing",
         "Existing dedupe behavior prevents duplicate trip entries"
+      ]
+    },
+    {
+      "id": "TR-013",
+      "title": "Make itinerary transit summaries clickable with popup details",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Optimized itinerary shows a single clickable transit summary per segment instead of inline leg detail text",
+        "Clicking the transit summary opens a popup window with notice, timing, transfer, wait, walk, and per-leg stop detail",
+        "Transit summary affordance has a visible hover state without affecting non-transit itinerary rendering"
+      ]
+    },
+    {
+      "id": "SH-005",
+      "title": "Default OTP base URL to localhost and persist effective setting",
+      "workstream": "settings-help",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "OTP base URL defaults to http://localhost:8080/ when no env or browser override is present",
+        "The effective OTP base URL is restored from browser storage on reload",
+        "Transit service and Settings UI use the same fallback behavior"
+      ]
+    },
+    {
+      "id": "UX-008",
+      "title": "Only auto-zoom map when generating a schedule",
+      "workstream": "planner-ux",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Clicks after a schedule exists do not retrigger itinerary map fit/zoom",
+        "Map still recenters when a new optimized schedule is generated",
+        "Direct map focus actions continue to work independently of itinerary auto-zoom"
       ]
     }
   ]
