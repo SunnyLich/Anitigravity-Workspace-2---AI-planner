@@ -271,6 +271,26 @@ function toIsoString(value) {
   return '';
 }
 
+function formatLocalOtpDate(value) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalOtpTime(value) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  const hours = String(parsed.getHours()).padStart(2, '0');
+  const minutes = String(parsed.getMinutes()).padStart(2, '0');
+  const seconds = String(parsed.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
 function addMinutesToIso(isoString, minutes) {
   const parsed = new Date(isoString);
   if (Number.isNaN(parsed.getTime())) return '';
@@ -668,8 +688,8 @@ async function fetchOtpRestItinerary(endpointUrl, { origin, destination, dateTim
   if (dateTime) {
     const parsed = new Date(dateTime);
     if (!Number.isNaN(parsed.getTime())) {
-      params.set('date', parsed.toISOString().slice(0, 10));
-      params.set('time', parsed.toISOString().slice(11, 19));
+      params.set('date', formatLocalOtpDate(parsed));
+      params.set('time', formatLocalOtpTime(parsed));
     }
   }
 
@@ -808,12 +828,23 @@ export async function getTransitRouteEstimate({ origin, destination, dateTime = 
         return normalizeOtpItinerary(itinerary);
       } catch (error) {
         lastError = error;
+        if (error?.name === 'AbortError') {
+          throw error;
+        }
+
         const message = String(error?.message || '');
-        if (message.startsWith('otp-http-error:404') || message.startsWith('otp-http-error:405')) {
+        if (
+          message.startsWith('otp-http-error:404')
+          || message.startsWith('otp-http-error:405')
+          || message.startsWith('otp-http-error:400')
+          || message.startsWith('otp-http-error:500')
+          || message.startsWith('otp-graphql-error')
+          || message.startsWith('otp-no-itinerary')
+        ) {
           continue;
         }
 
-        throw error;
+        continue;
       }
     }
 

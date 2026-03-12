@@ -506,6 +506,20 @@
       ]
     },
     {
+      "id": "TR-014",
+      "title": "Fix OTP REST fallback local departure-time formatting",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Legacy OTP REST fallback sends local wall-clock date and time instead of UTC-sliced values",
+        "REST fallback departure queries stay aligned with the schedule time used by optimization",
+        "GraphQL-first probing behavior remains unchanged"
+      ]
+    },
+    {
       "id": "SH-005",
       "title": "Default OTP base URL to localhost and persist effective setting",
       "workstream": "settings-help",

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Navigation, Download, MapPin, CalendarCheck, Train } from 'lucide-react';
+import { Clock, Download, MapPin, CalendarCheck, Train } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { WindowWrapper } from './TripFormWindow';
@@ -308,6 +308,7 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                 onClose={onClose}
                 onMinimize={onMinimize}
                 style={{ top: '100px', right: '20px' }}
+                draggable
             >
                 <div className="space-y-4">
                     <div className="glass-card py-2 px-3">
@@ -341,10 +342,8 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                 )}
 
                                 {idx > 0 && (
-                                    <div className="ml-4 my-1 opacity-70 space-y-1.5">
-                                        <div className="w-0.5 h-6 border-l border-dashed border-primary"></div>
+                                    <div className="ml-4 my-1 opacity-70">
                                         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                                            <Navigation size={12} className="text-primary" />
                                             {travelMethod === 'transit'
                                                 ? renderTransitSummary(item, idx)
                                                 : <span>{item.travelFromPrevious} min {travelMethod}</span>}
@@ -358,10 +357,8 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                                 )}
 
                                 {idx === 0 && item.firstLegFromStart && Number(item.travelFromPrevious) > 0 && (
-                                    <div className="ml-4 my-1 opacity-70 space-y-1.5">
-                                        <div className="w-0.5 h-6 border-l border-dashed border-primary"></div>
+                                    <div className="ml-4 my-1 opacity-70">
                                         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                                            <Navigation size={12} className="text-primary" />
                                             {travelMethod === 'transit'
                                                 ? renderTransitSummary(item, idx, true)
                                                 : <span>{item.travelFromPrevious} min {travelMethod} from start</span>}

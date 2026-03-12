@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12
+- Fixed OTP legacy REST fallback date/time formatting so planner requests now preserve the intended local wall-clock departure time instead of sending UTC-sliced values.
+- Tracking sync: added and completed `TR-014` in `planning/backlog.json`.
+
 ## 2026-03-11
 - Fixed itinerary map auto-zoom so routine clicks after a schedule exists no longer retrigger `fitBounds`; the map now recenters only when a new optimized schedule is generated, while direct focus actions still use targeted fly-to behavior.
 - Tracking sync: added and completed `UX-008` in `planning/backlog.json`.

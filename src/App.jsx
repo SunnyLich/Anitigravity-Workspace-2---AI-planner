@@ -996,7 +996,6 @@ function App() {
             onUpdateLocationPriority={updateTripLocationPriority}
             onUpdateLocationDuration={updateTripLocationDuration}
             onUpdateLocationOpeningHours={updateTripLocationOpeningHours}
-            routeEstimate={routeEstimate}
             pois={pois}
             customNodes={customNodes}
             selectedStartId={selectedStartId}
