@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Clock, Download, MapPin, CalendarCheck, Train, Play } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -153,10 +153,15 @@ const stopInteraction = (event) => {
 
 const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, onToggleRouteVisibility, onRouteColorChange, onAnimateRoute, canAnimateRoute, windowStyle, isOpen, onClose, onMinimize }) => {
     const [selectedTransitDetail, setSelectedTransitDetail] = useState(null);
+    const [routeColorDrafts, setRouteColorDrafts] = useState({});
     const absoluteTimeline = asAbsoluteTimeline(itinerary || []);
     const firstDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[0].arrivalAbs) : 0;
     const lastDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[absoluteTimeline.length - 1].departureAbs) : 0;
     const totalDays = Math.max(1, (lastDayOffset - firstDayOffset) + 1);
+
+    useEffect(() => {
+        setRouteColorDrafts({});
+    }, [itinerary]);
 
     const openNativeTimePicker = (event) => {
         const input = event.currentTarget;
@@ -291,6 +296,29 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
         });
     };
 
+    const getRouteDisplayColor = (item, index) => routeColorDrafts[index]
+        || item?.transitFromPrevious?.mapColor
+        || getDefaultRouteColor(index);
+
+    const previewRouteColor = (index, color) => {
+        setRouteColorDrafts((previous) => ({
+            ...previous,
+            [index]: color,
+        }));
+    };
+
+    const commitRouteColor = (index, color) => {
+        setRouteColorDrafts((previous) => {
+            if (!(index in previous)) return previous;
+
+            const nextDrafts = { ...previous };
+            delete nextDrafts[index];
+            return nextDrafts;
+        });
+
+        onRouteColorChange?.(index, color);
+    };
+
     const renderTransitSummary = (item, index, isFromStart = false) => (
         <div
             className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/5 px-2 py-1.5"
@@ -321,14 +349,14 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
             >
                 <span
                     className="relative h-3.5 w-3.5 overflow-hidden rounded-full border border-white/30"
-                    style={{ backgroundColor: item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index) }}
-                    title={`Current route color: ${item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index)}`}
+                    style={{ backgroundColor: getRouteDisplayColor(item, index) }}
+                    title={`Current route color: ${getRouteDisplayColor(item, index)}`}
                 >
                     <input
                         type="color"
-                        value={item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index)}
-                        onInput={(event) => onRouteColorChange?.(index, event.target.value)}
-                        onChange={(event) => onRouteColorChange?.(index, event.target.value)}
+                        value={getRouteDisplayColor(item, index)}
+                        onInput={(event) => previewRouteColor(index, event.target.value)}
+                        onChange={(event) => commitRouteColor(index, event.target.value)}
                         onClick={stopInteraction}
                         onMouseDown={stopInteraction}
                         onPointerDown={stopInteraction}

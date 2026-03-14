@@ -1,6 +1,7 @@
 {
   "name": "anitigravity-workspace-2---ai-planner",
   "private": true,
+  "license": "Apache-2.0",
   "version": "0.0.0",
   "main": "electron/main.cjs",
   "type": "module",
