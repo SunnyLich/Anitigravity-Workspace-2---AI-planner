@@ -7,7 +7,8 @@ import { TSPSolver } from './utils/tspSolver';
 import { createTransitTravelTimeCache, getRouteEstimate } from './services/mapboxRouting';
 import { ensureDesktopOtpRunning, getDesktopOtpStatus, isDesktopOtpManagerAvailable, stopDesktopOtpRuntime } from './services/otpDesktop';
 import { reverseGeocodeLocation } from './services/nominatim';
-import { createCustomLocation, dedupeLocations, normalizeLocation } from './utils/locationModel';
+import { createCustomLocation, normalizeLocation } from './utils/locationModel';
+import { getDefaultRouteColor } from './utils/routeAppearance';
 import { loadPoisFromFolder } from './utils/poiLoader';
 
 const CUSTOM_NODES_STORAGE_KEY = 'tripoptimizer.customNodes';
@@ -23,7 +24,6 @@ const TRIP_END_DATE_STORAGE_KEY = 'tripoptimizer.tripEndDate';
 const WAKE_TIME_STORAGE_KEY = 'tripoptimizer.wakeTime';
 const SLEEP_TIME_STORAGE_KEY = 'tripoptimizer.sleepTime';
 const BREAK_TIME_STORAGE_KEY = 'tripoptimizer.breakTimeMinutes';
-const UI_OPACITY_STORAGE_KEY = 'tripoptimizer.uiOpacity';
 const USE_MOCK_TRANSIT_STORAGE_KEY = 'tripoptimizer.useMockTransit';
 const OTP_BASE_URL_STORAGE_KEY = 'tripoptimizer.otpBaseUrl';
 const FALLBACK_OTP_BASE_URL = 'http://localhost:8080/';
@@ -33,7 +33,7 @@ const TIME_INPUT_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DEFAULT_USE_MOCK_TRANSIT = import.meta.env.VITE_USE_MOCK_TRANSIT !== 'false';
 const DEFAULT_OTP_BASE_URL = String(import.meta.env.VITE_OTP_BASE_URL || FALLBACK_OTP_BASE_URL).trim();
 const DEFAULT_MANAGED_OTP_BASE_URL = 'http://127.0.0.1:8080';
-const DEFAULT_UI_OPACITY = 1;
+const ENABLE_OTP_AUTOSTART = true;
 
 const resolveOtpBaseUrl = (rawValue) => String(rawValue || '').trim() || DEFAULT_OTP_BASE_URL;
 
@@ -124,53 +124,6 @@ const toLocationKey = (location) => {
   return `${name}|${lat.toFixed(LOCATION_KEY_PRECISION)}|${lng.toFixed(LOCATION_KEY_PRECISION)}`;
 };
 
-const buildItineraryRouteRequest = (plannedItinerary, startAnchor) => {
-  if (!Array.isArray(plannedItinerary) || plannedItinerary.length === 0) {
-    return null;
-  }
-
-  const assembledStops = [];
-  const firstStop = plannedItinerary[0];
-
-  if (firstStop?.firstLegFromStart && startAnchor && toLocationKey(startAnchor) !== toLocationKey(firstStop)) {
-    assembledStops.push(startAnchor);
-  }
-
-  assembledStops.push(...plannedItinerary);
-
-  const stops = assembledStops.filter((stop, index) => {
-    if (!stop) return false;
-    if (index === 0) return true;
-    return toLocationKey(stop) !== toLocationKey(assembledStops[index - 1]);
-  });
-
-  if (stops.length < 2) {
-    return null;
-  }
-
-  return {
-    origin: stops[0],
-    destination: stops[stops.length - 1],
-    locations: stops.slice(1, -1),
-  };
-};
-
-const restoreStoredLocation = (rawLocation, fallbackSource = 'search') => {
-  const normalized = normalizeLocation(rawLocation, rawLocation?.source || fallbackSource);
-  if (!normalized) return null;
-
-  const restoredDuration = Number(rawLocation?.duration ?? normalized.duration);
-  const restoredPriority = Number(rawLocation?.userPriority ?? rawLocation?.priority ?? normalized.userPriority ?? normalized.priority);
-
-  return {
-    ...normalized,
-    linkedCustomNodeId: rawLocation?.linkedCustomNodeId || normalized.linkedCustomNodeId,
-    duration: Number.isFinite(restoredDuration) ? Math.max(1, Math.round(restoredDuration)) : normalized.duration,
-    priority: Number.isFinite(restoredPriority) ? Math.min(5, Math.max(1, Math.round(restoredPriority))) : normalized.priority,
-    userPriority: Number.isFinite(restoredPriority) ? Math.min(5, Math.max(1, Math.round(restoredPriority))) : normalized.userPriority,
-  };
-};
-
 function App() {
   const today = new Date().toISOString().split('T')[0];
 
@@ -188,7 +141,6 @@ function App() {
   const [optimizerMode, setOptimizerMode] = useState('shortest-feasible');
   const [timeBudgetMinutes, setTimeBudgetMinutes] = useState(240);
   const [breakTimeMinutes, setBreakTimeMinutes] = useState(15);
-  const [uiOpacity, setUiOpacity] = useState(DEFAULT_UI_OPACITY);
   const [useMockTransit, setUseMockTransit] = useState(DEFAULT_USE_MOCK_TRANSIT);
   const [otpBaseUrl, setOtpBaseUrl] = useState(() => resolveOtpBaseUrl());
   const [otpRuntimeStatus, setOtpRuntimeStatus] = useState(() => ({
@@ -208,7 +160,6 @@ function App() {
   const [otpRuntimeActionPending, setOtpRuntimeActionPending] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [routeEstimate, setRouteEstimate] = useState(null);
-  const [candidateRoutes, setCandidateRoutes] = useState([]);
   const [routeAnimationTrigger, setRouteAnimationTrigger] = useState(0);
   const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
   const [mapFocusTarget, setMapFocusTarget] = useState(null);
@@ -233,7 +184,7 @@ function App() {
     sourceOpeningHoursText: '',
   });
   const [customNodeDraft, setCustomNodeDraft] = useState({ open: false, lat: null, lng: null, name: '', note: '' });
-  const optimizationRunRef = useRef({ id: 0, timeoutId: null, cancelled: false });
+  const otpAutoStartAttemptedRef = useRef(false);
 
   // Window Visibility State
   const [windows, setWindows] = useState({
@@ -258,7 +209,7 @@ function App() {
       if (raw) {
         const parsed = JSON.parse(raw);
         const normalized = Array.isArray(parsed)
-          ? dedupeLocations(parsed.map(item => restoreStoredLocation(item, 'custom')).filter(Boolean))
+          ? parsed.map(item => normalizeLocation(item, 'custom')).filter(Boolean)
           : [];
 
         setCustomNodes(normalized);
@@ -295,17 +246,14 @@ function App() {
       const rawWakeTime = localStorage.getItem(WAKE_TIME_STORAGE_KEY);
       const rawSleepTime = localStorage.getItem(SLEEP_TIME_STORAGE_KEY);
       const rawBreakTimeMinutes = localStorage.getItem(BREAK_TIME_STORAGE_KEY);
-      const rawUiOpacity = localStorage.getItem(UI_OPACITY_STORAGE_KEY);
       const rawUseMockTransit = localStorage.getItem(USE_MOCK_TRANSIT_STORAGE_KEY);
       const rawOtpBaseUrl = localStorage.getItem(OTP_BASE_URL_STORAGE_KEY);
 
       if (rawLocations) {
-        const parsedLocations = JSON.parse(rawLocations);
-        const normalizedLocations = Array.isArray(parsedLocations)
-          ? dedupeLocations(parsedLocations.map(item => restoreStoredLocation(item, item?.source || 'search')).filter(Boolean))
-          : [];
-        setLocations(normalizedLocations);
+        localStorage.removeItem(TRIP_LOCATIONS_STORAGE_KEY);
       }
+
+      setLocations([]);
 
       if (rawTravelMethod && ['walk', 'car', 'transit'].includes(rawTravelMethod)) {
         setTravelMethod(rawTravelMethod);
@@ -349,11 +297,6 @@ function App() {
         setBreakTimeMinutes(Math.min(180, Math.max(0, parsedBreak)));
       }
 
-      if (Number.isFinite(Number(rawUiOpacity))) {
-        const parsedOpacity = Number(rawUiOpacity);
-        setUiOpacity(Math.min(1, Math.max(0.4, parsedOpacity)));
-      }
-
       if (rawUseMockTransit === 'true' || rawUseMockTransit === 'false') {
         setUseMockTransit(rawUseMockTransit === 'true');
       }
@@ -363,10 +306,11 @@ function App() {
       }
 
       if (rawEndpoints) {
-        const parsedEndpoints = JSON.parse(rawEndpoints);
-        setSelectedStartId(parsedEndpoints.selectedStartId || '');
-        setSelectedDestinationId(parsedEndpoints.selectedDestinationId || '');
+        localStorage.removeItem(SELECTED_ENDPOINTS_STORAGE_KEY);
       }
+
+      setSelectedStartId('');
+      setSelectedDestinationId('');
     } catch (error) {
       console.warn('Could not restore trip session:', error);
     } finally {
@@ -489,27 +433,6 @@ function App() {
     if (!tripSessionHydrated) return;
 
     try {
-      localStorage.setItem(UI_OPACITY_STORAGE_KEY, String(uiOpacity));
-    } catch (error) {
-      console.warn('Could not save UI opacity:', error);
-    }
-  }, [uiOpacity, tripSessionHydrated]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.documentElement.style.setProperty('--ui-opacity', String(uiOpacity));
-  }, [uiOpacity]);
-
-  useEffect(() => () => {
-    if (optimizationRunRef.current.timeoutId) {
-      clearTimeout(optimizationRunRef.current.timeoutId);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!tripSessionHydrated) return;
-
-    try {
       localStorage.setItem(USE_MOCK_TRANSIT_STORAGE_KEY, String(useMockTransit));
     } catch (error) {
       console.warn('Could not save transit mock setting:', error);
@@ -559,6 +482,51 @@ function App() {
   }, [otpBaseUrl]);
 
   useEffect(() => {
+    if (!ENABLE_OTP_AUTOSTART || !tripSessionHydrated || !isDesktopOtpManagerAvailable() || otpAutoStartAttemptedRef.current) {
+      return undefined;
+    }
+
+    otpAutoStartAttemptedRef.current = true;
+    let cancelled = false;
+
+    const autoStartManagedOtp = async () => {
+      try {
+        const status = await getDesktopOtpStatus(resolveOtpBaseUrl(otpBaseUrl));
+        if (cancelled) return;
+
+        setOtpRuntimeStatus(status);
+        if (status?.running) {
+          setUseMockTransit(false);
+          setOtpBaseUrl(status.baseUrl || DEFAULT_MANAGED_OTP_BASE_URL);
+          return;
+        }
+
+        setOtpRuntimeActionPending(true);
+        await installAndRunManagedOtp();
+      } catch (error) {
+        if (cancelled) return;
+
+        setOtpRuntimeStatus((prev) => ({
+          ...prev,
+          running: false,
+          starting: false,
+          lastError: error instanceof Error ? error.message : String(error),
+        }));
+      } finally {
+        if (!cancelled) {
+          setOtpRuntimeActionPending(false);
+        }
+      }
+    };
+
+    autoStartManagedOtp();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [otpBaseUrl, tripSessionHydrated]);
+
+  useEffect(() => {
     if (!tripSessionHydrated) return;
 
     try {
@@ -594,17 +562,6 @@ function App() {
 
   const selectedStartLocation = resolveLocation(selectedStartId) || inferredStart;
   const selectedDestinationLocation = resolveLocation(selectedDestinationId) || inferredDestination;
-  const displayedRouteOrigin = routeEndpoints.source === 'itinerary-optimization'
-    ? routeEndpoints.origin
-    : (selectedStartLocation || routeEndpoints.origin);
-  const displayedRouteDestination = routeEndpoints.source === 'itinerary-optimization'
-    ? routeEndpoints.destination
-    : (selectedDestinationLocation || routeEndpoints.destination);
-  const itineraryWindowStyle = useMemo(() => (
-    windows.settings
-      ? { top: '100px', right: '408px', width: '420px' }
-      : { top: '100px', right: '20px', width: '420px' }
-  ), [windows.settings]);
   const canAnimateRoute = useMemo(() => {
     const hasTransitSegments = itinerary.some((item) => (
       Array.isArray(item?.transitFromPrevious?.geometry)
@@ -634,6 +591,58 @@ function App() {
     });
   };
 
+  const clearDerivedRouteStateForLocation = (location) => {
+    if (!location) return;
+
+    const removedKey = toLocationKey(location);
+    const itineraryAffected = itinerary.some((item) => toLocationKey(item) === removedKey);
+
+    setItinerary((previous) => {
+      const nextItinerary = previous.filter((item) => toLocationKey(item) !== removedKey);
+      return nextItinerary.length === previous.length ? previous : nextItinerary;
+    });
+
+    setRouteEstimate((previous) => {
+      if (!previous) return previous;
+
+      const endpointRemoved = [routeEndpoints.origin, routeEndpoints.destination]
+        .filter(Boolean)
+        .some((endpoint) => toLocationKey(endpoint) === removedKey);
+
+      return endpointRemoved || itineraryAffected ? null : previous;
+    });
+
+    setRouteEndpoints((previous) => {
+      const originRemoved = previous.origin && toLocationKey(previous.origin) === removedKey;
+      const destinationRemoved = previous.destination && toLocationKey(previous.destination) === removedKey;
+
+      if (!originRemoved && !destinationRemoved && !itineraryAffected) {
+        return previous;
+      }
+
+      return {
+        origin: originRemoved || itineraryAffected ? null : previous.origin,
+        destination: destinationRemoved || itineraryAffected ? null : previous.destination,
+        source: originRemoved || destinationRemoved || itineraryAffected ? null : previous.source,
+      };
+    });
+
+    setMapFocusTarget((previous) => {
+      if (!previous) return previous;
+      const sameLat = Number(previous.lat) === Number(location.lat);
+      const sameLng = Number(previous.lng) === Number(location.lng);
+      return sameLat && sameLng ? null : previous;
+    });
+  };
+
+  const installAndRunManagedOtp = async () => {
+    const status = await ensureDesktopOtpRunning(resolveOtpBaseUrl(otpBaseUrl));
+    setOtpRuntimeStatus(status);
+    setUseMockTransit(false);
+    setOtpBaseUrl(status.baseUrl || DEFAULT_MANAGED_OTP_BASE_URL);
+    return status;
+  };
+
   const addLocationToTrip = (rawLocation, options = {}) => {
     const normalized = normalizeLocation(rawLocation, rawLocation.source || 'search');
     if (!normalized) return;
@@ -650,14 +659,25 @@ function App() {
     }
 
     setLocations(prev => {
-      const exists = prev.some(item => item.id === normalizedWithLink.id || toLocationKey(item) === toLocationKey(normalizedWithLink));
+      const exists = prev.some(item => item.id === normalizedWithLink.id);
       if (exists) return prev;
       return [...prev, normalizedWithLink];
     });
   };
 
   const removeLocationFromTrip = (locationId) => {
-    setLocations(prev => prev.filter(item => item.id !== locationId));
+    let removedLocation = null;
+
+    setLocations(prev => prev.filter(item => {
+      if (item.id === locationId) {
+        removedLocation = item;
+        return false;
+      }
+
+      return true;
+    }));
+
+    clearDerivedRouteStateForLocation(removedLocation);
   };
 
   const handleSelectStart = (locationId) => {
@@ -762,28 +782,32 @@ function App() {
   };
 
   const deleteCustomNode = (locationId) => {
+    let removedNode = null;
+
     setCustomNodes(prev => prev.filter(item => item.id !== locationId));
     setSelectedStartId(prev => (prev === locationId ? '' : prev));
     setSelectedDestinationId(prev => (prev === locationId ? '' : prev));
-  };
 
-  const cancelActiveOptimization = () => {
-    optimizationRunRef.current.cancelled = true;
-    optimizationRunRef.current.id += 1;
+    setLocations((prev) => prev.filter((item) => {
+      const matchesLinkedId = item.linkedCustomNodeId === locationId;
+      const matchesId = item.id === locationId;
+      if (matchesLinkedId || matchesId) {
+        if (!removedNode) removedNode = item;
+        return false;
+      }
 
-    if (optimizationRunRef.current.timeoutId) {
-      clearTimeout(optimizationRunRef.current.timeoutId);
-      optimizationRunRef.current.timeoutId = null;
+      return true;
+    }));
+
+    if (!removedNode) {
+      const fallbackNode = customNodes.find((item) => item.id === locationId) || null;
+      removedNode = fallbackNode;
     }
 
-    setIsOptimizing(false);
+    clearDerivedRouteStateForLocation(removedNode);
   };
 
   const handleOptimize = async (payload, fallbackMethod, fallbackDate) => {
-    cancelActiveOptimization();
-    const runId = optimizationRunRef.current.id;
-    optimizationRunRef.current.cancelled = false;
-
     const runLocations = Array.isArray(payload) ? payload : (payload?.locations || []);
     const method = Array.isArray(payload) ? fallbackMethod : payload?.travelMethod;
     const date = Array.isArray(payload) ? fallbackDate : payload?.tripDate;
@@ -836,18 +860,8 @@ function App() {
     if (mode) setOptimizerMode(mode);
     if (Number.isFinite(budget)) setTimeBudgetMinutes(budget);
     setRouteEstimate(null);
-    setCandidateRoutes([]);
-    setRouteEndpoints({ origin: null, destination: null, source: null });
 
-    const isRunCancelled = () => optimizationRunRef.current.cancelled || optimizationRunRef.current.id !== runId;
-    const failIfCancelled = () => {
-      if (isRunCancelled()) {
-        throw new Error('optimization-cancelled');
-      }
-    };
-
-    optimizationRunRef.current.timeoutId = setTimeout(async () => {
-      optimizationRunRef.current.timeoutId = null;
+    setTimeout(async () => {
       const routeStartDateTime = combineDateTime(requestedStartDate, requestedStartTime)?.toISOString();
       const transitTravelCache = method === 'transit'
         ? createTransitTravelTimeCache({ bucketMinutes: 15 })
@@ -858,10 +872,8 @@ function App() {
         bufferTime: Math.max(0, Math.round(Number(breakTimeMinutes) || 0)),
         startTime: requestedStartTime || '09:00',
         startDateTime: routeStartDateTime,
-        shouldCancel: isRunCancelled,
         travelTimeProvider: transitTravelCache
           ? async ({ origin, destination, departureDateTimeIso }) => {
-            failIfCancelled();
             if (!origin || !destination) return 0;
             if (toLocationKey(origin) === toLocationKey(destination)) return 0;
 
@@ -883,11 +895,9 @@ function App() {
           tripStartTime: requestedStartTime,
           tripEndTime: requestedEndTime,
         });
-        failIfCancelled();
 
         const itineraryWithTransitDetails = method === 'transit' && transitTravelCache
           ? await Promise.all(result.map(async (item, index) => {
-            failIfCancelled();
             const previousStop = index > 0 ? result[index - 1] : null;
             const startAnchor = runLocations[0];
             const shouldUseStartAnchor = index === 0
@@ -912,7 +922,6 @@ function App() {
               destination: item,
               dateTime: departureDateTimeIso,
             });
-            failIfCancelled();
 
             return {
               ...item,
@@ -923,6 +932,7 @@ function App() {
                 isScheduleAware: transitEstimate.isScheduleAware,
                 geometry: Array.isArray(transitEstimate.geometry) ? transitEstimate.geometry : [],
                 mapVisible: item?.transitFromPrevious?.mapVisible !== false,
+                mapColor: String(item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index)),
                 durationMinutes: transitEstimate.durationMinutes,
                 departureTimeIso: transitEstimate.departureTimeIso,
                 arrivalTimeIso: transitEstimate.arrivalTimeIso,
@@ -938,42 +948,32 @@ function App() {
         if (Array.isArray(result?.unscheduledStops)) {
           itineraryWithTransitDetails.unscheduledStops = result.unscheduledStops;
         }
-        failIfCancelled();
-
-        setCandidateRoutes(Array.isArray(solver.lastSolveMeta?.topCandidates) ? solver.lastSolveMeta.topCandidates : []);
 
         setItinerary(itineraryWithTransitDetails);
         setScheduleRecenterKey((previous) => previous + 1);
         setWindows(prev => ({ ...prev, itinerary: true }));
 
-        const routeRequest = buildItineraryRouteRequest(itineraryWithTransitDetails, runLocations[0]);
-        if (routeRequest) {
+        if (itineraryWithTransitDetails.length >= 2) {
+          const origin = itineraryWithTransitDetails[0];
+          const destination = itineraryWithTransitDetails[itineraryWithTransitDetails.length - 1];
+          const middleStops = itineraryWithTransitDetails.slice(1, -1);
           const routeDateTime = routeStartDateTime;
 
           const routedEstimate = await getRouteEstimate({
-            origin: routeRequest.origin,
-            destination: routeRequest.destination,
-            locations: routeRequest.locations,
+            origin,
+            destination,
+            locations: middleStops,
             travelMethod: method,
             dateTime: routeDateTime,
           });
-          failIfCancelled();
 
-          setRouteEndpoints({
-            origin: routeRequest.origin,
-            destination: routeRequest.destination,
-            source: 'itinerary-optimization',
-          });
+          setRouteEndpoints({ origin, destination, source: 'itinerary-optimization' });
           setRouteEstimate(routedEstimate);
         }
       } catch (error) {
-        if (String(error?.message || '') !== 'optimization-cancelled') {
-          console.error('Could not optimize and route itinerary:', error);
-        }
+        console.error('Could not optimize and route itinerary:', error);
       } finally {
-        if (!isRunCancelled()) {
-          setIsOptimizing(false);
-        }
+        setIsOptimizing(false);
       }
     }, 1200);
   };
@@ -988,10 +988,7 @@ function App() {
     setOtpRuntimeActionPending(true);
 
     try {
-      const status = await ensureDesktopOtpRunning(resolveOtpBaseUrl(otpBaseUrl));
-      setOtpRuntimeStatus(status);
-      setUseMockTransit(false);
-      setOtpBaseUrl(status.baseUrl || DEFAULT_MANAGED_OTP_BASE_URL);
+      await installAndRunManagedOtp();
     } catch (error) {
       setOtpRuntimeStatus((prev) => ({
         ...prev,
@@ -1035,6 +1032,26 @@ function App() {
         transitFromPrevious: {
           ...item.transitFromPrevious,
           mapVisible: Boolean(isVisible),
+        },
+      };
+    }));
+  };
+
+  const updateItineraryRouteColor = (index, color) => {
+    const normalizedColor = /^#[0-9a-f]{6}$/i.test(String(color || '').trim())
+      ? String(color).trim()
+      : getDefaultRouteColor(index);
+
+    setItinerary((previous) => previous.map((item, itemIndex) => {
+      if (itemIndex !== index || !item?.transitFromPrevious) {
+        return item;
+      }
+
+      return {
+        ...item,
+        transitFromPrevious: {
+          ...item.transitFromPrevious,
+          mapColor: normalizedColor,
         },
       };
     }));
@@ -1088,8 +1105,8 @@ function App() {
         <MapDisplay
           itinerary={itinerary}
           routeGeometry={routeEstimate?.geometry || []}
-          origin={displayedRouteOrigin}
-          destination={displayedRouteDestination}
+          origin={selectedStartLocation || routeEndpoints.origin}
+          destination={selectedDestinationLocation || routeEndpoints.destination}
           focusTarget={mapFocusTarget}
           routeAnimationTrigger={routeAnimationTrigger}
           recenterTrigger={scheduleRecenterKey}
@@ -1275,7 +1292,6 @@ function App() {
             onAddLocation={addLocationToTrip}
             onRemoveLocation={removeLocationFromTrip}
             onOptimize={handleOptimize}
-            optimizationAlternatives={candidateRoutes}
             optimizerMode={optimizerMode}
             onOptimizerModeChange={setOptimizerMode}
             timeBudgetMinutes={timeBudgetMinutes}
@@ -1313,9 +1329,9 @@ function App() {
             tripDate={tripDate}
             onItineraryUpdate={handleItineraryUpdate}
             onToggleRouteVisibility={toggleItineraryRouteVisibility}
+            onRouteColorChange={updateItineraryRouteColor}
             onAnimateRoute={() => setRouteAnimationTrigger((previous) => previous + 1)}
             canAnimateRoute={canAnimateRoute}
-            windowStyle={itineraryWindowStyle}
             isOpen={windows.itinerary}
             onClose={() => toggleWindow('itinerary')}
             onMinimize={() => toggleWindow('itinerary')}
@@ -1328,7 +1344,6 @@ function App() {
             onClose={() => toggleWindow('settings')}
             onMinimize={() => toggleWindow('settings')}
             style={{ top: '140px', right: '20px', width: '360px', maxHeight: '70vh' }}
-            draggable
           >
             <div className="space-y-4 text-sm">
               <div className="glass-card p-3">
@@ -1370,23 +1385,6 @@ function App() {
                     />
                     <p className="text-[11px] text-text-muted">Applied directly to optimizer as per-stop buffer time.</p>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider">UI transparency</label>
-                      <span className="text-[11px] font-bold text-text-muted">{Math.round(uiOpacity * 100)}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={40}
-                      max={100}
-                      step={5}
-                      value={Math.round(uiOpacity * 100)}
-                      onChange={(e) => setUiOpacity(Math.min(1, Math.max(0.4, Number(e.target.value) / 100)))}
-                      className="w-full accent-primary"
-                      aria-label="UI transparency"
-                    />
-                    <p className="text-[11px] text-text-muted">At 100%, planner windows are fully opaque. Lower values make the UI translucent.</p>
-                  </div>
                 </div>
               </div>
               <div className="glass-card p-3">
@@ -1394,7 +1392,7 @@ function App() {
                 <div className="mt-2 space-y-3">
                   <div className="space-y-3">
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Managed OTP runtime</p>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Managed OTP (OpenTripPlanner) runtime</p>
                       <p className="mt-1 text-sm font-semibold text-text-main">
                         {otpRuntimeStatus.running
                           ? 'OTP detected and reachable.'
@@ -1536,13 +1534,6 @@ function App() {
           <p className="text-text-muted text-sm mt-2">
             Running TSP-TW heuristic algorithms...
           </p>
-          <button
-            type="button"
-            onClick={cancelActiveOptimization}
-            className="mt-5 rounded-xl border border-border-glass bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-text-main transition-colors hover:bg-white/20"
-          >
-            Cancel
-          </button>
         </div>
       )}
 

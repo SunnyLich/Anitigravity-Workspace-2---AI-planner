@@ -1,7 +1,7 @@
 meta:
   project: TripOptimizer
   owner: Team
-  updated: 2026-03-14
+  updated: 2026-03-10
   statusLegend:
     DONE: Implemented and usable
     PARTIAL: Foundation exists, incomplete workflow
@@ -56,7 +56,7 @@ workstreams:
     status: DONE
     owner: Team
     priority: P2
-    notes: Trip/session state including saved locations persists in browser localStorage, restores on app load, and now hardens restored location payloads through normalization, dedupe, and numeric coercion before optimization; workspace-root file persistence was intentionally dropped.
+    notes: Saved locations persist in browser localStorage and restore on app load, while the active trip location list and selected endpoints are intentionally reset on each startup; workspace-root file persistence was intentionally dropped.
     milestones:
       - id: SP1
         title: Browser session persistence for trip and custom nodes
@@ -69,7 +69,7 @@ workstreams:
     status: DONE
     owner: Team
     priority: P2
-    notes: Settings are actionable for Time Constrained Mode, Help panel has been removed, break-time is wired into optimization, daily-availability controls are centralized in Settings, optimization runs can be cancelled from the loading overlay, UI transparency is adjustable from Settings with 100% meaning fully opaque, and workspace windows are draggable/resizable.
+    notes: Settings are actionable for Time Constrained Mode, Help panel has been removed, break-time is wired into optimization, and daily-availability controls are now centralized in Settings.
     milestones:
       - id: SH1
         title: Add settings/help windows and dock wiring
@@ -137,7 +137,7 @@ workstreams:
     status: DONE
     owner: Team
     priority: P0
-    notes: OTP provider selection, adapter wiring, fallback handling, visible planner route estimates, richer normalized schedule metadata, cached transit leg lookup, schedule-aware transit optimization, itinerary transit leg rendering, per-segment map visibility toggles, schedule-triggered route animation with a direction arrow, OTP setup/verification docs, runtime transit settings controls, and managed desktop graph/runtime compatibility preflight with override hooks are in place.
+    notes: OTP provider selection, adapter wiring, fallback handling, visible planner route estimates, richer normalized schedule metadata, cached transit leg lookup, schedule-aware transit optimization, itinerary transit leg rendering, live route color/visibility controls, schedule-triggered route animation, OTP setup/verification docs, runtime transit settings controls, and managed desktop graph/runtime compatibility preflight with override hooks are in place. OTP route selection now evaluates multiple itinerary candidates, prefers real transit over walk-only alternatives, still allows walk-inclusive results when needed, and managed OTP autostart is currently disabled behind a ready-to-reenable startup flag pending further investigation.
     milestones:
       - id: TR1
         title: Provider comparison and decision

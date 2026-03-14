@@ -3,6 +3,7 @@ import { Clock, Download, MapPin, CalendarCheck, Train, Play } from 'lucide-reac
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { WindowWrapper } from './TripFormWindow';
+import { getDefaultRouteColor } from '../utils/routeAppearance';
 
 const DAY_MINUTES = 1440;
 
@@ -146,7 +147,11 @@ const getOpeningHoursProvenance = (location) => {
     return labels[source] || { text: 'Unknown hours source', isPlaceholder: true };
 };
 
-const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, onToggleRouteVisibility, onAnimateRoute, canAnimateRoute, windowStyle, isOpen, onClose, onMinimize }) => {
+const stopInteraction = (event) => {
+    event.stopPropagation();
+};
+
+const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, onToggleRouteVisibility, onRouteColorChange, onAnimateRoute, canAnimateRoute, windowStyle, isOpen, onClose, onMinimize }) => {
     const [selectedTransitDetail, setSelectedTransitDetail] = useState(null);
     const absoluteTimeline = asAbsoluteTimeline(itinerary || []);
     const firstDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[0].arrivalAbs) : 0;
@@ -287,20 +292,58 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
     };
 
     const renderTransitSummary = (item, index, isFromStart = false) => (
-        <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/5 px-2 py-1.5">
+        <div
+            className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/5 px-2 py-1.5"
+            onClick={stopInteraction}
+            onMouseDown={stopInteraction}
+            onPointerDown={stopInteraction}
+            onWheel={stopInteraction}
+        >
             <label className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-text-muted">
                 <input
                     type="checkbox"
                     checked={item?.transitFromPrevious?.mapVisible !== false}
                     onChange={(event) => onToggleRouteVisibility?.(index, event.target.checked)}
+                    onClick={stopInteraction}
+                    onMouseDown={stopInteraction}
+                    onPointerDown={stopInteraction}
                     className="h-3.5 w-3.5 accent-primary"
                     aria-label={`Toggle map visibility for ${String(item?.name || 'route').split(',')[0]}`}
                 />
                 Map
             </label>
+            <label
+                className="inline-flex cursor-pointer items-center gap-1 text-[10px] font-black uppercase tracking-wider text-text-muted"
+                onClick={stopInteraction}
+                onMouseDown={stopInteraction}
+                onPointerDown={stopInteraction}
+                onWheel={stopInteraction}
+            >
+                <span
+                    className="relative h-3.5 w-3.5 overflow-hidden rounded-full border border-white/30"
+                    style={{ backgroundColor: item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index) }}
+                    title={`Current route color: ${item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index)}`}
+                >
+                    <input
+                        type="color"
+                        value={item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index)}
+                        onInput={(event) => onRouteColorChange?.(index, event.target.value)}
+                        onChange={(event) => onRouteColorChange?.(index, event.target.value)}
+                        onClick={stopInteraction}
+                        onMouseDown={stopInteraction}
+                        onPointerDown={stopInteraction}
+                        onWheel={stopInteraction}
+                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        aria-label={`Choose route color for ${String(item?.name || 'route').split(',')[0]}`}
+                    />
+                </span>
+                Color
+            </label>
             <button
                 type="button"
                 onClick={() => openTransitDetail(item, index, isFromStart)}
+                onMouseDown={stopInteraction}
+                onPointerDown={stopInteraction}
                 className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary/20 hover:shadow-lg hover:shadow-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                 title="View transit details"
             >

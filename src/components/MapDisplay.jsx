@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getDefaultRouteColor } from '../utils/routeAppearance';
 
 // Fix for default Leaflet markers in Vite
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -57,8 +58,6 @@ const CATEGORY_COLORS = {
     building: '#94a3b8',
     natural: '#22c55e',
 };
-
-const ROUTE_LAYER_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f97316'];
 
 function getArrowHeadingDegrees(startPoint, endPoint) {
     if (!Array.isArray(startPoint) || !Array.isArray(endPoint)) return 0;
@@ -174,7 +173,7 @@ const MapDisplay = ({
                 label: String(item?.name || `Route ${index + 1}`).split(',')[0],
                 geometry,
                 visible: item?.transitFromPrevious?.mapVisible !== false,
-                color: ROUTE_LAYER_COLORS[index % ROUTE_LAYER_COLORS.length],
+                color: String(item?.transitFromPrevious?.mapColor || getDefaultRouteColor(index)),
             };
         })
         .filter(Boolean), [itinerary]);
@@ -347,11 +346,13 @@ const MapDisplay = ({
 
             {visibleOverlayRoutes.length > 0 && visibleOverlayRoutes.map((route) => (
                 <Polyline
-                    key={route.id}
+                    key={`${route.id}-${route.color}`}
                     positions={route.geometry}
-                    color={route.color}
-                    weight={5}
-                    opacity={0.92}
+                    pathOptions={{
+                        color: route.color,
+                        weight: 5,
+                        opacity: 0.92,
+                    }}
                 />
             ))}
 

@@ -6,6 +6,7 @@ const MAPBOX_PROFILE_BY_METHOD = {
 
 const OTP_DEFAULT_TIMEOUT_MS = 12000;
 const OTP_FAILURE_COOLDOWN_MS = 60000;
+const OTP_ITINERARY_CANDIDATE_COUNT = 5;
 const USE_MOCK_TRANSIT_STORAGE_KEY = 'tripoptimizer.useMockTransit';
 const OTP_BASE_URL_STORAGE_KEY = 'tripoptimizer.otpBaseUrl';
 const OTP_ENDPOINT_PREFERENCE_CACHE = new Map();
@@ -696,6 +697,41 @@ function extractOtpLegMode(leg) {
   return String(leg?.mode || 'WALK').toUpperCase();
 }
 
+function countTransitLegs(itinerary) {
+  const legs = Array.isArray(itinerary?.legs) ? itinerary.legs : [];
+  return legs.reduce((count, leg) => count + (leg?.transitLeg ? 1 : 0), 0);
+}
+
+function choosePreferredOtpItinerary(itineraries) {
+  const candidates = Array.isArray(itineraries) ? itineraries.filter(Boolean) : [];
+  if (candidates.length === 0) return null;
+
+  return [...candidates].sort((left, right) => {
+    const leftTransitLegs = countTransitLegs(left);
+    const rightTransitLegs = countTransitLegs(right);
+
+    if (leftTransitLegs !== rightTransitLegs) {
+      return rightTransitLegs - leftTransitLegs;
+    }
+
+    const leftDuration = Number(left?.duration || Number.MAX_SAFE_INTEGER);
+    const rightDuration = Number(right?.duration || Number.MAX_SAFE_INTEGER);
+    if (leftDuration !== rightDuration) {
+      return leftDuration - rightDuration;
+    }
+
+    const leftWalk = Number(left?.walkTime || 0);
+    const rightWalk = Number(right?.walkTime || 0);
+    if (leftWalk !== rightWalk) {
+      return leftWalk - rightWalk;
+    }
+
+    const leftTransfers = Number(left?.numberOfTransfers || 0);
+    const rightTransfers = Number(right?.numberOfTransfers || 0);
+    return leftTransfers - rightTransfers;
+  })[0] || null;
+}
+
 function normalizeOtpItinerary(itinerary) {
   const legs = Array.isArray(itinerary?.legs) ? itinerary.legs : [];
   const totalDistanceKm = legs.reduce((sum, leg) => sum + (Number(leg?.distance || 0) / 1000), 0);
@@ -834,7 +870,7 @@ async function fetchOtpRestItinerary(endpointUrl, { origin, destination, dateTim
     fromPlace: `${origin.lat},${origin.lng}`,
     toPlace: `${destination.lat},${destination.lng}`,
     mode: 'WALK,TRANSIT',
-    numItineraries: '1',
+    numItineraries: String(OTP_ITINERARY_CANDIDATE_COUNT),
   });
 
   if (dateTime) {
@@ -851,7 +887,7 @@ async function fetchOtpRestItinerary(endpointUrl, { origin, destination, dateTim
   }
 
   const data = await response.json();
-  const itinerary = data?.plan?.itineraries?.[0];
+  const itinerary = choosePreferredOtpItinerary(data?.plan?.itineraries);
   if (!itinerary) {
     throw new Error('otp-no-itinerary');
   }
@@ -889,9 +925,8 @@ async function fetchOtpGraphqlItinerary(endpointUrl, { origin, destination, date
           },
         },
         dateTime: departureIso ? { earliestDeparture: departureIso } : null,
-        first: 1,
+        first: OTP_ITINERARY_CANDIDATE_COUNT,
         modes: {
-          transitOnly: true,
           transit: {
             access: ['WALK'],
             egress: ['WALK'],
@@ -912,7 +947,11 @@ async function fetchOtpGraphqlItinerary(endpointUrl, { origin, destination, date
   }
 
   const planConnection = data?.data?.planConnection;
-  const itinerary = planConnection?.edges?.[0]?.node;
+  const itinerary = choosePreferredOtpItinerary(
+    Array.isArray(planConnection?.edges)
+      ? planConnection.edges.map((edge) => buildLegacyOtpItineraryFromGraphql(edge?.node)).filter(Boolean)
+      : []
+  );
   if (!itinerary) {
     const routingErrors = Array.isArray(planConnection?.routingErrors)
       ? planConnection.routingErrors
@@ -926,8 +965,7 @@ async function fetchOtpGraphqlItinerary(endpointUrl, { origin, destination, date
 
     throw new Error('otp-no-itinerary');
   }
-
-  return buildLegacyOtpItineraryFromGraphql(itinerary);
+  return itinerary;
 }
 
 export async function getTransitRouteEstimate({ origin, destination, dateTime = new Date().toISOString() }) {
