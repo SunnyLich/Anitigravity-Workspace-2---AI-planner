@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Minus, MapPin, Search, Footprints, Car, Train, Calendar, Trash2, Star } from 'lucide-react';
 import { searchLocations } from '../services/nominatim';
-import { dedupeLocations, locationSearchText, normalizeLocation } from '../utils/locationModel';
+import { dedupeLocations, normalizeLocation } from '../utils/locationModel';
 import { buildLocalSearchIndex, matchesLondonHint, searchLocalIndex } from '../utils/localSearch';
 
 const parsePixelValue = (value) => {
@@ -314,7 +314,6 @@ const TripFormWindow = ({
             sleepTime,
         });
     }, [isTimeConstrainedMode, tripStartDate, tripStartTime, tripEndDate, tripEndTime, wakeTime, sleepTime]);
-    const timeframeMinutes = isTimeConstrainedMode ? timeframe.totalMinutes : 0;
     const hasValidTimeframe = !isTimeConstrainedMode || timeframe.valid;
 
     if (!isOpen) return null;

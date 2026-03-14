@@ -137,7 +137,7 @@ workstreams:
     status: DONE
     owner: Team
     priority: P0
-    notes: OTP provider selection, adapter wiring, fallback handling, visible planner route estimates, richer normalized schedule metadata, cached transit leg lookup, schedule-aware transit optimization, itinerary transit leg rendering, OTP setup/verification docs, and runtime transit settings controls are in place.
+    notes: OTP provider selection, adapter wiring, fallback handling, visible planner route estimates, richer normalized schedule metadata, cached transit leg lookup, schedule-aware transit optimization, itinerary transit leg rendering, OTP setup/verification docs, runtime transit settings controls, and managed desktop graph/runtime compatibility preflight with override hooks are in place.
     milestones:
       - id: TR1
         title: Provider comparison and decision

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Compass, Search, CalendarCheck, Settings, MapPin } from 'lucide-react';
 import { TripFormWindow, WindowWrapper } from './components/TripFormWindow';
 import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
 import { createTransitTravelTimeCache, getRouteEstimate } from './services/mapboxRouting';
+import { ensureDesktopOtpRunning, getDesktopOtpStatus, isDesktopOtpManagerAvailable, stopDesktopOtpRuntime } from './services/otpDesktop';
 import { reverseGeocodeLocation } from './services/nominatim';
 import { createCustomLocation, normalizeLocation } from './utils/locationModel';
 import { loadPoisFromFolder } from './utils/poiLoader';
@@ -30,6 +31,7 @@ const LOCATION_KEY_PRECISION = 5;
 const TIME_INPUT_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DEFAULT_USE_MOCK_TRANSIT = import.meta.env.VITE_USE_MOCK_TRANSIT !== 'false';
 const DEFAULT_OTP_BASE_URL = String(import.meta.env.VITE_OTP_BASE_URL || FALLBACK_OTP_BASE_URL).trim();
+const DEFAULT_MANAGED_OTP_BASE_URL = 'http://127.0.0.1:8080';
 
 const resolveOtpBaseUrl = (rawValue) => String(rawValue || '').trim() || DEFAULT_OTP_BASE_URL;
 
@@ -108,12 +110,6 @@ const computeConstrainedMinutes = ({ tripStartDate, tripStartTime, tripEndDate, 
   };
 };
 
-const toMinutes = (timeValue) => {
-  const [h, m] = String(timeValue || '').split(':').map(Number);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-  return (h * 60) + m;
-};
-
 const toLocationKey = (location) => {
   const name = String(location?.name || '').trim().toLowerCase();
   const lat = Number(location?.lat);
@@ -145,6 +141,21 @@ function App() {
   const [breakTimeMinutes, setBreakTimeMinutes] = useState(15);
   const [useMockTransit, setUseMockTransit] = useState(DEFAULT_USE_MOCK_TRANSIT);
   const [otpBaseUrl, setOtpBaseUrl] = useState(() => resolveOtpBaseUrl());
+  const [otpRuntimeStatus, setOtpRuntimeStatus] = useState(() => ({
+    available: isDesktopOtpManagerAvailable(),
+    running: false,
+    managed: false,
+    starting: false,
+    baseUrl: DEFAULT_MANAGED_OTP_BASE_URL,
+    detectedUrl: '',
+    source: isDesktopOtpManagerAvailable() ? 'unknown' : 'browser-only',
+    canInstall: isDesktopOtpManagerAvailable(),
+    canStop: false,
+    lastError: '',
+    lastLogLine: '',
+    bundledDataAvailable: false,
+  }));
+  const [otpRuntimeActionPending, setOtpRuntimeActionPending] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [routeEstimate, setRouteEstimate] = useState(null);
   const [routeEndpoints, setRouteEndpoints] = useState({ origin: null, destination: null, source: null });
@@ -154,6 +165,7 @@ function App() {
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [customNodes, setCustomNodes] = useState([]);
   const [customNodesHydrated, setCustomNodesHydrated] = useState(false);
+  const [tripSessionHydrated, setTripSessionHydrated] = useState(false);
   const [pois, setPois] = useState([]);
   const [mapContextMenu, setMapContextMenu] = useState({
     visible: false,
@@ -298,114 +310,177 @@ function App() {
       }
     } catch (error) {
       console.warn('Could not restore trip session:', error);
+    } finally {
+      // Avoid overwriting stored session settings with initial defaults before restoration finishes.
+      setTripSessionHydrated(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(TRIP_LOCATIONS_STORAGE_KEY, JSON.stringify(locations));
     } catch (error) {
       console.warn('Could not save trip locations:', error);
     }
-  }, [locations]);
+  }, [locations, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(TRAVEL_METHOD_STORAGE_KEY, travelMethod);
     } catch (error) {
       console.warn('Could not save travel method:', error);
     }
-  }, [travelMethod]);
+  }, [travelMethod, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(OPTIMIZER_MODE_STORAGE_KEY, optimizerMode);
     } catch (error) {
       console.warn('Could not save optimizer mode:', error);
     }
-  }, [optimizerMode]);
+  }, [optimizerMode, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(TIME_BUDGET_STORAGE_KEY, String(timeBudgetMinutes));
     } catch (error) {
       console.warn('Could not save time budget:', error);
     }
-  }, [timeBudgetMinutes]);
+  }, [timeBudgetMinutes, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(TRIP_START_TIME_STORAGE_KEY, tripStartTime);
     } catch (error) {
       console.warn('Could not save trip start time:', error);
     }
-  }, [tripStartTime]);
+  }, [tripStartTime, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(TRIP_END_TIME_STORAGE_KEY, tripEndTime);
     } catch (error) {
       console.warn('Could not save trip end time:', error);
     }
-  }, [tripEndTime]);
+  }, [tripEndTime, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(TRIP_START_DATE_STORAGE_KEY, tripStartDate);
     } catch (error) {
       console.warn('Could not save trip start date:', error);
     }
-  }, [tripStartDate]);
+  }, [tripStartDate, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(TRIP_END_DATE_STORAGE_KEY, tripEndDate);
     } catch (error) {
       console.warn('Could not save trip end date:', error);
     }
-  }, [tripEndDate]);
+  }, [tripEndDate, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(WAKE_TIME_STORAGE_KEY, wakeTime);
     } catch (error) {
       console.warn('Could not save wake time:', error);
     }
-  }, [wakeTime]);
+  }, [wakeTime, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(SLEEP_TIME_STORAGE_KEY, sleepTime);
     } catch (error) {
       console.warn('Could not save sleep time:', error);
     }
-  }, [sleepTime]);
+  }, [sleepTime, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(BREAK_TIME_STORAGE_KEY, String(breakTimeMinutes));
     } catch (error) {
       console.warn('Could not save break time:', error);
     }
-  }, [breakTimeMinutes]);
+  }, [breakTimeMinutes, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(USE_MOCK_TRANSIT_STORAGE_KEY, String(useMockTransit));
     } catch (error) {
       console.warn('Could not save transit mock setting:', error);
     }
-  }, [useMockTransit]);
+  }, [useMockTransit, tripSessionHydrated]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(OTP_BASE_URL_STORAGE_KEY, resolveOtpBaseUrl(otpBaseUrl));
     } catch (error) {
       console.warn('Could not save OTP base URL:', error);
     }
+  }, [otpBaseUrl, tripSessionHydrated]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshOtpRuntimeStatus = async () => {
+      try {
+        const status = await getDesktopOtpStatus(resolveOtpBaseUrl(otpBaseUrl));
+        if (!cancelled) {
+          setOtpRuntimeStatus(status);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setOtpRuntimeStatus((prev) => ({
+            ...prev,
+            available: isDesktopOtpManagerAvailable(),
+            running: false,
+            starting: false,
+            lastError: error instanceof Error ? error.message : String(error),
+          }));
+        }
+      }
+    };
+
+    refreshOtpRuntimeStatus();
+
+    const intervalId = window.setInterval(refreshOtpRuntimeStatus, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
   }, [otpBaseUrl]);
 
   useEffect(() => {
+    if (!tripSessionHydrated) return;
+
     try {
       localStorage.setItem(
         SELECTED_ENDPOINTS_STORAGE_KEY,
@@ -414,9 +489,12 @@ function App() {
     } catch (error) {
       console.warn('Could not save selected endpoints:', error);
     }
-  }, [selectedStartId, selectedDestinationId]);
+  }, [selectedStartId, selectedDestinationId, tripSessionHydrated]);
 
-  const availableLocations = [...locations, ...customNodes];
+  const availableLocations = useMemo(
+    () => [...locations, ...customNodes],
+    [locations, customNodes]
+  );
 
   useEffect(() => {
     const hasStart = selectedStartId ? availableLocations.some(item => item.id === selectedStartId) : true;
@@ -751,6 +829,48 @@ function App() {
     }, 1200);
   };
 
+  const refreshOtpRuntimeStatus = async () => {
+    const status = await getDesktopOtpStatus(resolveOtpBaseUrl(otpBaseUrl));
+    setOtpRuntimeStatus(status);
+    return status;
+  };
+
+  const handleInstallAndRunOtp = async () => {
+    setOtpRuntimeActionPending(true);
+
+    try {
+      const status = await ensureDesktopOtpRunning(resolveOtpBaseUrl(otpBaseUrl));
+      setOtpRuntimeStatus(status);
+      setUseMockTransit(false);
+      setOtpBaseUrl(status.baseUrl || DEFAULT_MANAGED_OTP_BASE_URL);
+    } catch (error) {
+      setOtpRuntimeStatus((prev) => ({
+        ...prev,
+        running: false,
+        starting: false,
+        lastError: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setOtpRuntimeActionPending(false);
+    }
+  };
+
+  const handleStopOtp = async () => {
+    setOtpRuntimeActionPending(true);
+
+    try {
+      const status = await stopDesktopOtpRuntime();
+      setOtpRuntimeStatus(status);
+    } catch (error) {
+      setOtpRuntimeStatus((prev) => ({
+        ...prev,
+        lastError: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setOtpRuntimeActionPending(false);
+    }
+  };
+
   const handleItineraryUpdate = (updatedItinerary) => {
     setItinerary(updatedItinerary);
   };
@@ -1081,16 +1201,78 @@ function App() {
                 </div>
               </div>
               <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Current Mode</p>
-                <p className="mt-2 text-xs text-text-muted">
-                  {optimizerMode === 'time-constrained-fit'
-                    ? 'Time Constrained Mode is active. Break time will affect schedule feasibility and budget usage.'
-                    : 'Switch to Time Constrained Mode in Plan Trip to use these settings during optimization.'}
-                </p>
-              </div>
-              <div className="glass-card p-3">
                 <p className="text-xs font-black uppercase tracking-wider text-text-muted">Transit Provider</p>
                 <div className="mt-2 space-y-3">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Managed OTP runtime</p>
+                      <p className="mt-1 text-sm font-semibold text-text-main">
+                        {otpRuntimeStatus.running
+                          ? 'OTP detected and reachable.'
+                          : otpRuntimeStatus.starting || otpRuntimeActionPending
+                            ? 'Starting OTP runtime...'
+                            : otpRuntimeStatus.available
+                              ? 'OTP not detected on the configured local URL.'
+                              : 'Desktop OTP controls are only available in the packaged app.'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-text-muted">
+                        {otpRuntimeStatus.running
+                          ? `Detected at ${otpRuntimeStatus.detectedUrl || otpRuntimeStatus.baseUrl}`
+                          : otpRuntimeStatus.available
+                            ? 'Use the install/run button to download OTP + Java if needed and launch the bundled graph.'
+                            : 'The web build cannot install or launch local executables because it runs inside the browser sandbox.'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          refreshOtpRuntimeStatus().catch((error) => {
+                            setOtpRuntimeStatus((prev) => ({
+                              ...prev,
+                              lastError: error instanceof Error ? error.message : String(error),
+                            }));
+                          });
+                        }}
+                        className="rounded-xl border border-border-glass bg-white/5 px-3 py-2 text-xs font-bold tracking-wide text-text-main transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={otpRuntimeActionPending}
+                      >
+                        Refresh status
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleInstallAndRunOtp}
+                        className="rounded-xl bg-primary px-3 py-2 text-xs font-bold tracking-wide text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!otpRuntimeStatus.available || otpRuntimeActionPending}
+                      >
+                        {otpRuntimeActionPending || otpRuntimeStatus.starting ? 'Working...' : 'Install + Run OTP'}
+                      </button>
+                    </div>
+
+                    {otpRuntimeStatus.canStop && (
+                      <button
+                        type="button"
+                        onClick={handleStopOtp}
+                        className="w-full rounded-xl border border-border-glass bg-white/5 px-3 py-2 text-xs font-bold tracking-wide text-text-main transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={otpRuntimeActionPending}
+                      >
+                        Stop managed OTP
+                      </button>
+                    )}
+
+                    {otpRuntimeStatus.lastError && (
+                      <p className="text-[11px] text-rose-200">
+                        {otpRuntimeStatus.lastError}
+                      </p>
+                    )}
+
+                    {otpRuntimeStatus.lastLogLine && (
+                      <p className="text-[11px] text-text-muted">
+                        {otpRuntimeStatus.lastLogLine}
+                      </p>
+                    )}
+                  </div>
                   <label className="flex items-center justify-between gap-3 rounded-xl border border-border-glass bg-white/5 px-3 py-2.5 cursor-pointer">
                     <div>
                       <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Use mock transit</p>
@@ -1115,14 +1297,11 @@ function App() {
                       spellCheck={false}
                     />
                     <p className="text-[11px] text-text-muted">
-                      Runtime override stored in browser storage. Use the OTP deployment base URL; the app appends the router path automatically. Current source: {useMockTransit ? 'mock transit enabled' : 'browser setting or default OTP URL'}
+                      Runtime override stored in browser storage. Use the OTP deployment base URL; the app appends the router path automatically. Current source: {useMockTransit ? 'mock transit enabled' : 'browser setting or default OTP URL'}.
+                      {otpRuntimeStatus.running ? ` Managed runtime detected at ${otpRuntimeStatus.baseUrl}.` : ''}
                     </p>
                   </div>
                 </div>
-              </div>
-              <div className="glass-card p-3">
-                <p className="text-xs font-black uppercase tracking-wider text-text-muted">Saved Locations Persistence</p>
-                <p className="mt-2 text-[11px] text-text-muted">Saved locations persist in local browser storage and are restored on app load.</p>
               </div>
             </div>
           </WindowWrapper>

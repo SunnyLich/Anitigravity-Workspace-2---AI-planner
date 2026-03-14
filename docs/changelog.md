@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-03-14
+- Fixed desktop managed OTP startup to reject incompatible bundled `graph.obj` files before launch by checking the graph serialization id against the configured managed OTP runtime.
+- Added Electron-side overrides for the managed OTP jar path or URL plus serialization id so desktop builds can target a compatible custom OTP artifact without regenerating the graph.
+- Updated transit docs to explain the managed graph/runtime compatibility requirement and override path.
+- Tracking sync: added and completed `TR-016` in `planning/backlog.json`.
+
+## 2026-03-13
+- Fixed desktop managed OTP startup diagnostics so the app now fails fast with an explicit local-port conflict message instead of only surfacing `OTP exited with code 1`.
+- Settings now continues to show the last OTP process log line even when a startup error is present, making packaged-build runtime failures easier to diagnose.
+- Tracking sync: added and completed `TR-015` in `planning/backlog.json`.
+
 ## 2026-03-12
 - Fixed OTP legacy REST fallback date/time formatting so planner requests now preserve the intended local wall-clock departure time instead of sending UTC-sliced values.
 - Tracking sync: added and completed `TR-014` in `planning/backlog.json`.

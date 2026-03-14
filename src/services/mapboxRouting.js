@@ -155,7 +155,7 @@ function buildMockRoute(origin, destination, travelMethod) {
   });
 }
 
-function buildTransitNotice(reason) {
+function buildTransitNotice(reason, detail = '') {
   const notices = {
     'mock-config-enabled': 'Using mock transit estimates (mock mode enabled).',
     'otp-not-configured': 'Transit provider is not configured. Showing fallback estimate.',
@@ -165,7 +165,44 @@ function buildTransitNotice(reason) {
     'otp-request-failed': 'Transit provider is unavailable. Showing fallback estimate.',
   };
 
-  return notices[reason] || 'Transit provider unavailable. Showing fallback estimate.';
+  const baseNotice = notices[reason] || 'Transit provider unavailable. Showing fallback estimate.';
+  const normalizedDetail = String(detail || '').trim();
+
+  if (!normalizedDetail) {
+    return baseNotice;
+  }
+
+  return `${baseNotice} ${normalizedDetail}`;
+}
+
+function formatTransitErrorDetail(error) {
+  const message = String(error?.message || '').trim();
+  if (!message) return '';
+
+  if (message.startsWith('otp-http-error:')) {
+    const statusCode = message.slice('otp-http-error:'.length).trim();
+    return statusCode ? `OTP responded with HTTP ${statusCode}.` : '';
+  }
+
+  if (message.startsWith('otp-graphql-error:')) {
+    const graphqlMessage = message.slice('otp-graphql-error:'.length).trim();
+    return graphqlMessage ? `OTP GraphQL error: ${graphqlMessage}` : 'OTP GraphQL returned an error.';
+  }
+
+  if (message.startsWith('otp-no-itinerary:')) {
+    const routingMessage = message.slice('otp-no-itinerary:'.length).trim();
+    return routingMessage ? `OTP routing detail: ${routingMessage}` : '';
+  }
+
+  if (message === 'otp-no-itinerary') {
+    return 'OTP returned no itinerary for the selected trip.';
+  }
+
+  if (message === 'otp-request-failed') {
+    return 'OTP could not be reached from the app.';
+  }
+
+  return message;
 }
 
 function getStoredTransitBoolean(key) {
@@ -427,6 +464,7 @@ function inferWaitMinutesFromOtpLegs(legs) {
 
 function buildMockTransitRoute(origin, destination, options = {}) {
   const fallbackReason = String(options.reason || 'mock-config-enabled');
+  const fallbackDetail = String(options.detail || '').trim();
   const directKm = haversineDistanceKm(origin, destination);
   const walkToStopMinutes = Math.max(4, Math.round(directKm * 6));
   const rideMinutes = Math.max(6, Math.round(directKm * 2.4));
@@ -513,7 +551,7 @@ function buildMockTransitRoute(origin, destination, options = {}) {
     isScheduleAware: false,
     isMock: true,
     unavailable: Boolean(options.unavailable),
-    notice: buildTransitNotice(fallbackReason),
+    notice: buildTransitNotice(fallbackReason, fallbackDetail),
     departureTimeIso,
     arrivalTimeIso,
     transferCount: 0,
@@ -568,7 +606,7 @@ function normalizeOtpItinerary(itinerary) {
     return appendUniqueGeometryPoints(points, fallbackPoints);
   }, []);
 
-  const legSummaries = legs.map((leg, index) => {
+  const legSummaries = legs.map((leg) => {
     const fromName = String(leg?.from?.name || 'Start').trim();
     const toName = String(leg?.to?.name || 'End').trim();
     const mode = String(leg?.mode || (leg?.transitLeg ? 'TRANSIT' : 'WALK')).toUpperCase();
@@ -852,6 +890,7 @@ export async function getTransitRouteEstimate({ origin, destination, dateTime = 
   } catch (error) {
     console.warn('OTP transit routing unavailable, using mock transit fallback:', error);
     let fallbackReason = 'otp-request-failed';
+    const fallbackDetail = formatTransitErrorDetail(error);
     if (error?.name === 'AbortError') {
       fallbackReason = 'otp-timeout';
     } else if (String(error?.message || '').startsWith('otp-http-error')) {
@@ -865,6 +904,7 @@ export async function getTransitRouteEstimate({ origin, destination, dateTime = 
     return buildMockTransitRoute(origin, destination, {
       dateTime,
       reason: fallbackReason,
+      detail: fallbackDetail,
       unavailable: true,
     });
   } finally {

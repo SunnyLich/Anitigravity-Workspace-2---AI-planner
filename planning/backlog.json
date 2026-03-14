@@ -520,6 +520,34 @@
       ]
     },
     {
+      "id": "TR-015",
+      "title": "Preflight managed OTP port conflicts and expose startup diagnostics",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Managed desktop OTP startup fails fast with an explicit port-conflict error before spawning OTP",
+        "Non-zero OTP exits include the latest process log detail in the surfaced error message",
+        "Settings UI still shows the latest OTP log line even when an error message is present"
+      ]
+    },
+    {
+      "id": "TR-016",
+      "title": "Preflight desktop OTP graph/runtime compatibility and allow artifact overrides",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Managed desktop OTP startup rejects incompatible graph serialization ids before spawning OTP",
+        "Desktop runtime supports overriding the managed OTP jar path or URL plus serialization id for custom compatible builds",
+        "Desktop OTP documentation explains the graph/runtime compatibility requirement and override path"
+      ]
+    },
+    {
       "id": "SH-005",
       "title": "Default OTP base URL to localhost and persist effective setting",
       "workstream": "settings-help",

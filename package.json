@@ -2,14 +2,20 @@
   "name": "anitigravity-workspace-2---ai-planner",
   "private": true,
   "version": "0.0.0",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite",
+    "dev:desktop": "concurrently -k \"npm:dev:web\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on tcp:5173 && powershell -NoProfile -Command \"$env:ELECTRON_RENDERER_URL='http://127.0.0.1:5173'; electron .\"",
     "build": "vite build",
+    "build:desktop": "npm run build && electron-builder --win nsis portable",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "extract-zip": "^2.0.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.0",
     "leaflet": "^1.9.4",
@@ -24,11 +30,44 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.1",
+    "electron": "^35.1.5",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "tailwindcss": "^4.2.1",
     "vite": "^7.3.1"
+    ,"wait-on": "^8.0.5"
+  },
+  "build": {
+    "appId": "com.anitigravity.tripoptimizer",
+    "productName": "TripOptimizer",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "src/data/Transit",
+        "to": "otp-assets",
+        "filter": [
+          "graph.obj",
+          "google_gtfs.zip",
+          "ontario-260310.osm.pbf"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
   }
 }

@@ -35,6 +35,8 @@ npm run dev
   - `VITE_OTP_TIMEOUT_MS=12000`
   - Use the OTP deployment base URL (`http://localhost:8080` for root-mounted OTP or `http://localhost:8080/otp` when served under `/otp`).
   - OTP 2.9+ deployments may expose GraphQL trip planning instead of the legacy REST planner path; the app probes the supported GraphQL planner endpoints automatically before falling back to the legacy REST endpoint.
+- Desktop managed OTP defaults to OTP 2.8.1 and now validates the bundled `graph.obj` serialization id before launch.
+- If the bundled graph was built with a different OTP build, set `TRIPOPTIMIZER_MANAGED_OTP_JAR_PATH` or `TRIPOPTIMIZER_MANAGED_OTP_JAR_URL` together with `TRIPOPTIMIZER_MANAGED_OTP_SERIALIZATION_ID` for the Electron process.
 
 ## Transit verification
 - Success path:
