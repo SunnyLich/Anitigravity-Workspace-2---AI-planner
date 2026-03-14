@@ -1,7 +1,7 @@
 {
   "meta": {
     "project": "TripOptimizer",
-    "updated": "2026-03-10",
+    "updated": "2026-03-14",
     "source": "Migrated from PROJECT_TRACKER and PROJECT_TRACKER_SYSTEMATIC"
   },
   "items": [
@@ -573,6 +573,118 @@
         "Clicks after a schedule exists do not retrigger itinerary map fit/zoom",
         "Map still recenters when a new optimized schedule is generated",
         "Direct map focus actions continue to work independently of itinerary auto-zoom"
+      ]
+    },
+    {
+      "id": "SH-006",
+      "title": "Add cancellable optimization loading overlay",
+      "workstream": "settings-help",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Optimization overlay shows a cancel action while itinerary generation is running",
+        "Cancel stops the active optimization run from applying stale itinerary or route results",
+        "A new optimize action safely replaces any previous in-flight optimization"
+      ]
+    },
+    {
+      "id": "SH-007",
+      "title": "Add UI transparency control to Settings",
+      "workstream": "settings-help",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Settings includes a transparency control for floating planner UI surfaces",
+        "Chosen opacity persists across reloads via browser storage",
+        "Planner windows and dock respond to the configured opacity without affecting the map"
+      ]
+    },
+    {
+      "id": "TR-017",
+      "title": "Toggle itinerary transit segment visibility on map",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Each clickable transit segment summary includes a map-visibility toggle",
+        "Map respects per-segment visibility so overlapping transit segments can be isolated",
+        "Hiding all segment routes does not reintroduce the combined fallback route unexpectedly"
+      ]
+    },
+    {
+      "id": "TR-018",
+      "title": "Animate visible route path from schedule window",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Schedule window includes an animate-route action",
+        "Map animates along the currently visible route path when triggered",
+        "Animation respects per-segment visibility so only visible routes are animated"
+      ]
+    },
+    {
+      "id": "SH-008",
+      "title": "Make 100% UI transparency fully opaque",
+      "workstream": "settings-help",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "UI transparency defaults to 100% on first load",
+        "At 100%, planner windows and dock fully obscure the map beneath them",
+        "Lower transparency settings still make the floating UI translucent"
+      ]
+    },
+    {
+      "id": "UX-009",
+      "title": "Make planner windows draggable, resizable, and better staggered",
+      "workstream": "planner-ux",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Settings window is draggable like the other workspace windows",
+        "Workspace windows are resizable",
+        "The itinerary window opens offset from the Settings window when both are created together"
+      ]
+    },
+    {
+      "id": "SP-002",
+      "title": "Harden restored session locations before optimization",
+      "workstream": "session-persistence",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Restored trip and custom locations are normalized and deduplicated before use",
+        "Legacy stored numeric fields such as duration and priority are coerced safely",
+        "Optimization behaves predictably after loading locations from a previous session"
+      ]
+    },
+    {
+      "id": "TR-019",
+      "title": "Use a direction arrow for route animation",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "done",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Animated route playback uses an arrow instead of a neutral circle",
+        "Arrow heading updates to match travel direction along the path",
+        "Animation still works for the currently visible route path only"
       ]
     }
   ]

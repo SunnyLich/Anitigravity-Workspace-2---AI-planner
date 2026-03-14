@@ -293,7 +293,7 @@ export function normalizeLocation(raw, source = 'external') {
     openingRules,
     openingHoursText,
     metadata,
-    duration: Number.isFinite(adaptedRaw.duration) ? adaptedRaw.duration : 60,
+    duration: Number.isFinite(Number(adaptedRaw.duration)) ? Math.max(1, Math.round(Number(adaptedRaw.duration))) : 60,
   };
 }
 

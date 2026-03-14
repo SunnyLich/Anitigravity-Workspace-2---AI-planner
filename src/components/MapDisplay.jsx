@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -58,6 +58,35 @@ const CATEGORY_COLORS = {
     natural: '#22c55e',
 };
 
+const ROUTE_LAYER_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f97316'];
+
+function getArrowHeadingDegrees(startPoint, endPoint) {
+    if (!Array.isArray(startPoint) || !Array.isArray(endPoint)) return 0;
+
+    const deltaLng = Number(endPoint[1]) - Number(startPoint[1]);
+    const deltaLat = Number(endPoint[0]) - Number(startPoint[0]);
+    if (!Number.isFinite(deltaLng) || !Number.isFinite(deltaLat)) return 0;
+
+    return (Math.atan2(-deltaLat, deltaLng) * 180) / Math.PI;
+}
+
+function appendUniquePoints(points, additions) {
+    additions.forEach((point) => {
+        if (!Array.isArray(point) || point.length !== 2) return;
+        const [lat, lng] = point;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const previous = points[points.length - 1];
+        if (previous && previous[0] === lat && previous[1] === lng) {
+            return;
+        }
+
+        points.push([lat, lng]);
+    });
+
+    return points;
+}
+
 function hexToRgb(hex) {
     const normalized = hex.replace('#', '');
     const expanded = normalized.length === 3
@@ -115,12 +144,15 @@ const MapDisplay = ({
     origin,
     destination,
     focusTarget,
+    routeAnimationTrigger = 0,
     recenterTrigger = 0,
     pois = [],
     customNodes = [],
     onMapContextMenu,
     onMapClick,
 }) => {
+    const [animatedRoutePosition, setAnimatedRoutePosition] = useState(null);
+    const [animatedRouteHeading, setAnimatedRouteHeading] = useState(0);
     const points = useMemo(
         () => itinerary.map(item => ({ lat: item.lat, lng: item.lng })),
         [itinerary]
@@ -129,9 +161,86 @@ const MapDisplay = ({
         () => points.map(p => [p.lat, p.lng]),
         [points]
     );
-    const hasRouteGeometry = Array.isArray(routeGeometry) && routeGeometry.length > 1;
-    const routeSegmentCount = hasRouteGeometry ? routeGeometry.length - 1 : 0;
+    const itineraryRouteOverlays = useMemo(() => itinerary
+        .map((item, index) => {
+            const geometry = Array.isArray(item?.transitFromPrevious?.geometry)
+                ? item.transitFromPrevious.geometry
+                : [];
+
+            if (geometry.length <= 1) return null;
+
+            return {
+                id: `itinerary-route-${index}`,
+                label: String(item?.name || `Route ${index + 1}`).split(',')[0],
+                geometry,
+                visible: item?.transitFromPrevious?.mapVisible !== false,
+                color: ROUTE_LAYER_COLORS[index % ROUTE_LAYER_COLORS.length],
+            };
+        })
+        .filter(Boolean), [itinerary]);
+    const visibleOverlayRoutes = useMemo(
+        () => itineraryRouteOverlays.filter((route) => route.visible),
+        [itineraryRouteOverlays]
+    );
+    const hasOverlayRoutes = itineraryRouteOverlays.length > 0;
+    const overlayGeometry = useMemo(
+        () => visibleOverlayRoutes.reduce((allPoints, route) => appendUniquePoints(allPoints, route.geometry), []),
+        [visibleOverlayRoutes]
+    );
+    const activeRouteGeometry = hasOverlayRoutes
+        ? overlayGeometry
+        : routeGeometry;
+    const hasRouteGeometry = Array.isArray(activeRouteGeometry) && activeRouteGeometry.length > 1;
+    const routeSegmentCount = hasRouteGeometry ? activeRouteGeometry.length - 1 : 0;
     const center = points.length > 0 ? [points[0].lat, points[0].lng] : LONDON_ON;
+    const animatedArrowIcon = useMemo(() => L.divIcon({
+        className: '',
+        html: `<div style="font-size:24px;line-height:1;color:#f43f5e;text-shadow:0 0 8px rgba(15,23,42,0.85);transform:rotate(${animatedRouteHeading}deg);transform-origin:center center;">➜</div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+    }), [animatedRouteHeading]);
+
+    useEffect(() => {
+        if (!routeAnimationTrigger || !Array.isArray(activeRouteGeometry) || activeRouteGeometry.length < 2) {
+            setAnimatedRoutePosition(null);
+            setAnimatedRouteHeading(0);
+            return undefined;
+        }
+
+        let frameId = 0;
+        const totalSegments = activeRouteGeometry.length - 1;
+        const durationMs = Math.min(12000, Math.max(2500, totalSegments * 120));
+        const startedAt = performance.now();
+
+        const step = (now) => {
+            const progress = Math.max(0, Math.min(1, (now - startedAt) / durationMs));
+            const segmentProgress = progress * totalSegments;
+            const segmentIndex = Math.min(totalSegments - 1, Math.floor(segmentProgress));
+            const localProgress = Math.max(0, Math.min(1, segmentProgress - segmentIndex));
+            const startPoint = activeRouteGeometry[segmentIndex];
+            const endPoint = activeRouteGeometry[segmentIndex + 1];
+
+            setAnimatedRoutePosition([
+                startPoint[0] + ((endPoint[0] - startPoint[0]) * localProgress),
+                startPoint[1] + ((endPoint[1] - startPoint[1]) * localProgress),
+            ]);
+            setAnimatedRouteHeading(getArrowHeadingDegrees(startPoint, endPoint));
+
+            if (progress < 1) {
+                frameId = window.requestAnimationFrame(step);
+            }
+        };
+
+        setAnimatedRoutePosition(activeRouteGeometry[0]);
+        setAnimatedRouteHeading(getArrowHeadingDegrees(activeRouteGeometry[0], activeRouteGeometry[1]));
+        frameId = window.requestAnimationFrame(step);
+
+        return () => {
+            if (frameId) {
+                window.cancelAnimationFrame(frameId);
+            }
+        };
+    }, [routeAnimationTrigger, activeRouteGeometry]);
 
     return (
         <MapContainer
@@ -236,9 +345,19 @@ const MapDisplay = ({
                 />
             )}
 
-            {hasRouteGeometry && (
-                routeGeometry.slice(1).map((point, index) => {
-                    const startPoint = routeGeometry[index];
+            {visibleOverlayRoutes.length > 0 && visibleOverlayRoutes.map((route) => (
+                <Polyline
+                    key={route.id}
+                    positions={route.geometry}
+                    color={route.color}
+                    weight={5}
+                    opacity={0.92}
+                />
+            ))}
+
+            {visibleOverlayRoutes.length === 0 && !hasOverlayRoutes && hasRouteGeometry && (
+                activeRouteGeometry.slice(1).map((point, index) => {
+                    const startPoint = activeRouteGeometry[index];
                     const endPoint = point;
                     const ratio = routeSegmentCount <= 1 ? 1 : index / (routeSegmentCount - 1);
                     const segmentColor = interpolateColor('#6366f1', '#10b981', ratio);
@@ -253,6 +372,13 @@ const MapDisplay = ({
                         />
                     );
                 })
+            )}
+
+            {Array.isArray(animatedRoutePosition) && animatedRoutePosition.length === 2 && (
+                <Marker
+                    position={animatedRoutePosition}
+                    icon={animatedArrowIcon}
+                />
             )}
 
             {origin && (

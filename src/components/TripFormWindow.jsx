@@ -9,7 +9,7 @@ const parsePixelValue = (value) => {
     return Number.isFinite(numericValue) ? numericValue : null;
 };
 
-const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style, draggable = false }) => {
+const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style, draggable = true }) => {
     const [position, setPosition] = useState(() => {
         const initialTop = parsePixelValue(style?.top) ?? 100;
         const initialLeft = parsePixelValue(style?.left);
@@ -91,7 +91,7 @@ const WindowWrapper = ({ title, icon: Icon, children, onClose, onMinimize, style
 
     return (
         <div className="glass-panel workspace-window animate-in fade-in zoom-in-95 duration-200" style={wrapperStyle}>
-            <div className="window-header" onMouseDown={handleDragStart}>
+            <div className="window-header" onMouseDown={handleDragStart} style={{ cursor: draggable ? undefined : 'default' }}>
                 <div className="flex items-center gap-2">
                     {Icon && <Icon size={16} className="text-primary" />}
                     <span className="text-sm font-bold tracking-tight">{title}</span>
@@ -178,6 +178,12 @@ const computeConstrainedMinutes = ({ tripStartDate, tripStartTime, tripEndDate, 
     return { valid: totalMinutes > 0, totalMinutes };
 };
 
+const summarizeCandidateRoute = (candidate) => {
+    const stops = Array.isArray(candidate?.itinerary) ? candidate.itinerary : [];
+    if (stops.length === 0) return 'No stops recorded';
+    return stops.map((stop) => String(stop?.name || 'Unnamed stop').split(',')[0]).join(' -> ');
+};
+
 const scoreSearchResult = (location, query) => {
     const normalizedQuery = String(query || '').toLowerCase().trim();
     const name = String(location?.name || '').toLowerCase();
@@ -212,6 +218,7 @@ const TripFormWindow = ({
     onAddLocation,
     onRemoveLocation,
     onOptimize,
+    optimizationAlternatives = [],
     optimizerMode,
     onOptimizerModeChange,
     timeBudgetMinutes,
@@ -249,6 +256,7 @@ const TripFormWindow = ({
     const [editingSavedNodeId, setEditingSavedNodeId] = useState('');
     const [editingSavedField, setEditingSavedField] = useState('');
     const [editingSavedValue, setEditingSavedValue] = useState('');
+    const [showAlternativeRoutes, setShowAlternativeRoutes] = useState(false);
 
     const startSavedNodeInlineEdit = (node, field) => {
         setEditingSavedNodeId(node.id);
@@ -303,6 +311,10 @@ const TripFormWindow = ({
     );
 
     const isTimeConstrainedMode = optimizerMode === 'time-constrained-fit';
+    const visibleAlternatives = useMemo(
+        () => (Array.isArray(optimizationAlternatives) ? optimizationAlternatives.slice(0, 5) : []),
+        [optimizationAlternatives]
+    );
     const timeframe = useMemo(() => {
         if (!isTimeConstrainedMode) return 0;
         return computeConstrainedMinutes({
@@ -315,6 +327,12 @@ const TripFormWindow = ({
         });
     }, [isTimeConstrainedMode, tripStartDate, tripStartTime, tripEndDate, tripEndTime, wakeTime, sleepTime]);
     const hasValidTimeframe = !isTimeConstrainedMode || timeframe.valid;
+
+    useEffect(() => {
+        if (visibleAlternatives.length === 0) {
+            setShowAlternativeRoutes(false);
+        }
+    }, [visibleAlternatives]);
 
     if (!isOpen) return null;
 
@@ -726,6 +744,54 @@ const TripFormWindow = ({
                     <Calendar size={16} />
                     {isTimeConstrainedMode ? 'Optimize Time-Constrained Fit' : 'Optimize Schedule'}
                 </button>
+
+                <button
+                    type="button"
+                    onClick={() => setShowAlternativeRoutes(prev => !prev)}
+                    disabled={visibleAlternatives.length === 0}
+                    className="w-full bg-white/5 hover:bg-white/10 py-2.5 rounded-xl font-bold text-xs border border-border-glass transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                    {showAlternativeRoutes ? 'Hide Top 5 Other Routes Considered' : 'Show Top 5 Other Routes Considered'}
+                </button>
+
+                {showAlternativeRoutes && visibleAlternatives.length > 0 && (
+                    <div className="glass-card p-3 space-y-3 border border-border-glass/80">
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Top Other Routes Considered</p>
+                            <span className="text-[10px] font-bold text-text-muted">{visibleAlternatives.length} shown</span>
+                        </div>
+
+                        {visibleAlternatives.map((candidate, index) => (
+                            <div key={candidate.id || `${candidate.sequenceKey || 'candidate'}-${index}`} className="rounded-xl border border-border-glass bg-black/10 p-3 space-y-2">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-bold">Option {index + 1}</p>
+                                        <p className="text-[11px] text-text-muted break-words">{summarizeCandidateRoute(candidate)}</p>
+                                    </div>
+                                    <span className="shrink-0 rounded-full bg-white/5 px-2 py-1 text-[10px] font-bold text-text-muted">
+                                        {candidate.completedCount || 0} stops
+                                    </span>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                                    <span>{candidate.elapsedMinutes || candidate.budgetUsedMinutes || 0} min total</span>
+                                    <span>{candidate.totalTravelMinutes || 0} min travel</span>
+                                    {Number(candidate.totalWaitMinutes) > 0 && <span>{candidate.totalWaitMinutes} min wait</span>}
+                                    {isTimeConstrainedMode && <span>Priority {candidate.totalPriority || 0}</span>}
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    {(Array.isArray(candidate.itinerary) ? candidate.itinerary : []).map((stop, stopIndex) => (
+                                        <div key={`${candidate.sequenceKey || index}-${stop.id || stopIndex}`} className="flex items-center justify-between gap-3 text-[11px]">
+                                            <span className="truncate font-bold">{stopIndex + 1}. {String(stop?.name || 'Unnamed stop').split(',')[0]}</span>
+                                            <span className="shrink-0 text-text-muted">{stop?.arrivalTime || '--:--'} to {stop?.departureTime || '--:--'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">

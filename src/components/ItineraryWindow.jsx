@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Download, MapPin, CalendarCheck, Train } from 'lucide-react';
+import { Clock, Download, MapPin, CalendarCheck, Train, Play } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { WindowWrapper } from './TripFormWindow';
@@ -146,7 +146,7 @@ const getOpeningHoursProvenance = (location) => {
     return labels[source] || { text: 'Unknown hours source', isPlaceholder: true };
 };
 
-const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, isOpen, onClose, onMinimize }) => {
+const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, onToggleRouteVisibility, onAnimateRoute, canAnimateRoute, windowStyle, isOpen, onClose, onMinimize }) => {
     const [selectedTransitDetail, setSelectedTransitDetail] = useState(null);
     const absoluteTimeline = asAbsoluteTimeline(itinerary || []);
     const firstDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[0].arrivalAbs) : 0;
@@ -287,15 +287,27 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
     };
 
     const renderTransitSummary = (item, index, isFromStart = false) => (
-        <button
-            type="button"
-            onClick={() => openTransitDetail(item, index, isFromStart)}
-            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary/20 hover:shadow-lg hover:shadow-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-            title="View transit details"
-        >
-            <Train size={11} />
-            <span>{item.travelFromPrevious} min transit{isFromStart ? ' from start' : ''}</span>
-        </button>
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/5 px-2 py-1.5">
+            <label className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-text-muted">
+                <input
+                    type="checkbox"
+                    checked={item?.transitFromPrevious?.mapVisible !== false}
+                    onChange={(event) => onToggleRouteVisibility?.(index, event.target.checked)}
+                    className="h-3.5 w-3.5 accent-primary"
+                    aria-label={`Toggle map visibility for ${String(item?.name || 'route').split(',')[0]}`}
+                />
+                Map
+            </label>
+            <button
+                type="button"
+                onClick={() => openTransitDetail(item, index, isFromStart)}
+                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary/20 hover:shadow-lg hover:shadow-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                title="View transit details"
+            >
+                <Train size={11} />
+                <span>{item.travelFromPrevious} min transit{isFromStart ? ' from start' : ''}</span>
+            </button>
+        </div>
     );
 
     if (!isOpen || !itinerary || itinerary.length === 0) return null;
@@ -307,7 +319,7 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                 icon={CalendarCheck}
                 onClose={onClose}
                 onMinimize={onMinimize}
-                style={{ top: '100px', right: '20px' }}
+                style={windowStyle || { top: '100px', right: '20px' }}
                 draggable
             >
                 <div className="space-y-4">
@@ -327,6 +339,13 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
                         </button>
                         <button onClick={exportPDF} className="flex-1 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-xs font-bold transition-all border border-border-glass">
                             <Download size={14} /> PDF
+                        </button>
+                        <button
+                            onClick={() => onAnimateRoute?.()}
+                            disabled={!canAnimateRoute}
+                            className="flex-1 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-xs font-bold transition-all border border-border-glass disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                            <Play size={14} /> Animate
                         </button>
                     </div>
 

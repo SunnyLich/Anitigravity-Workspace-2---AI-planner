@@ -1,6 +1,17 @@
 # Changelog
 
 ## 2026-03-14
+- Changed UI transparency semantics so the default is 100% and planner surfaces are fully opaque at that setting instead of still showing the map through them.
+- Made workspace windows draggable by default, added resizing support, and offset the itinerary window away from Settings when both windows are created together.
+- Hardened restored browser-session locations with normalization, dedupe, and numeric coercion before optimization to reduce cross-session schedule glitches.
+- Replaced the route playback circle with a direction-aware arrow marker that points along the animated path.
+- Tracking sync: added and completed `SH-008`, `UX-009`, `SP-002`, and `TR-019` in `planning/backlog.json`, and updated `settings-help`, `session-persistence`, and `real-transit` notes in `planning/workstreams.yaml`.
+- Added per-segment map visibility toggles to clickable itinerary transit summaries so overlapping route shapes can be isolated directly from the schedule window.
+- Added an Animate action to the schedule window that moves a marker along the currently visible route path on the map.
+- Tracking sync: added and completed `TR-017` and `TR-018` in `planning/backlog.json`, and updated `real-transit` notes in `planning/workstreams.yaml`.
+- Added a cancel action to the itinerary-loading overlay and threaded cancellation checks through the optimizer so abandoned runs stop applying stale results.
+- Added a Settings slider for floating-UI transparency, persisted in browser storage and applied to the planner windows, cards, and dock.
+- Tracking sync: added and completed `SH-006` and `SH-007` in `planning/backlog.json`, and updated `settings-help` notes in `planning/workstreams.yaml`.
 - Fixed desktop managed OTP startup to reject incompatible bundled `graph.obj` files before launch by checking the graph serialization id against the configured managed OTP runtime.
 - Added Electron-side overrides for the managed OTP jar path or URL plus serialization id so desktop builds can target a compatible custom OTP artifact without regenerating the graph.
 - Updated transit docs to explain the managed graph/runtime compatibility requirement and override path.

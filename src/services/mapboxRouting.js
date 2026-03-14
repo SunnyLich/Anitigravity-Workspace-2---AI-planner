@@ -5,9 +5,11 @@ const MAPBOX_PROFILE_BY_METHOD = {
 };
 
 const OTP_DEFAULT_TIMEOUT_MS = 12000;
+const OTP_FAILURE_COOLDOWN_MS = 60000;
 const USE_MOCK_TRANSIT_STORAGE_KEY = 'tripoptimizer.useMockTransit';
 const OTP_BASE_URL_STORAGE_KEY = 'tripoptimizer.otpBaseUrl';
 const OTP_ENDPOINT_PREFERENCE_CACHE = new Map();
+const OTP_UNAVAILABLE_UNTIL_CACHE = new Map();
 const FALLBACK_OTP_BASE_URL = 'http://localhost:8080/';
 const OTP_GRAPHQL_PLAN_QUERY = `query Plan(
   $origin: PlanLabeledLocationInput!
@@ -288,6 +290,35 @@ function rememberOtpEndpointSuccess(baseUrl, endpointUrl) {
   const normalizedBaseUrl = normalizeOtpBaseUrl(baseUrl);
   if (!normalizedBaseUrl || !endpointUrl) return;
   OTP_ENDPOINT_PREFERENCE_CACHE.set(normalizedBaseUrl, endpointUrl);
+  OTP_UNAVAILABLE_UNTIL_CACHE.delete(normalizedBaseUrl);
+}
+
+function rememberOtpEndpointFailure(baseUrl, cooldownMs = OTP_FAILURE_COOLDOWN_MS) {
+  const normalizedBaseUrl = normalizeOtpBaseUrl(baseUrl);
+  if (!normalizedBaseUrl) return;
+
+  OTP_UNAVAILABLE_UNTIL_CACHE.set(
+    normalizedBaseUrl,
+    Date.now() + Math.max(1000, Math.round(Number(cooldownMs) || OTP_FAILURE_COOLDOWN_MS))
+  );
+}
+
+function isOtpEndpointCoolingDown(baseUrl) {
+  const normalizedBaseUrl = normalizeOtpBaseUrl(baseUrl);
+  if (!normalizedBaseUrl) return false;
+
+  const unavailableUntil = Number(OTP_UNAVAILABLE_UNTIL_CACHE.get(normalizedBaseUrl) || 0);
+  if (!Number.isFinite(unavailableUntil) || unavailableUntil <= 0) {
+    OTP_UNAVAILABLE_UNTIL_CACHE.delete(normalizedBaseUrl);
+    return false;
+  }
+
+  if (unavailableUntil <= Date.now()) {
+    OTP_UNAVAILABLE_UNTIL_CACHE.delete(normalizedBaseUrl);
+    return false;
+  }
+
+  return true;
 }
 
 function toIsoString(value) {
@@ -429,6 +460,89 @@ function appendUniqueGeometryPoints(points, additions) {
   }
 
   return points;
+}
+
+function normalizeRouteStops({ origin, destination, locations = [] }) {
+  const stops = [origin, ...(Array.isArray(locations) ? locations : []), destination]
+    .filter((stop) => stop && Number.isFinite(Number(stop.lat)) && Number.isFinite(Number(stop.lng)));
+
+  return stops.filter((stop, index) => {
+    if (index === 0) return true;
+
+    const previous = stops[index - 1];
+    return !(Number(previous.lat) === Number(stop.lat) && Number(previous.lng) === Number(stop.lng));
+  });
+}
+
+function mergeRouteEstimates(estimates, travelMethod) {
+  const validEstimates = Array.isArray(estimates) ? estimates.filter(Boolean) : [];
+  if (validEstimates.length === 0) {
+    return normalizeRouteEstimate({
+      provider: 'unknown',
+      travelMethod,
+      profile: MAPBOX_PROFILE_BY_METHOD[travelMethod] || 'walking',
+      distanceKm: 0,
+      durationMinutes: 1,
+      geometry: [],
+      legs: [],
+    });
+  }
+
+  const geometry = validEstimates.reduce((points, estimate) => (
+    appendUniqueGeometryPoints(points, Array.isArray(estimate.geometry) ? estimate.geometry : [])
+  ), []);
+
+  const notices = Array.from(new Set(validEstimates
+    .map((estimate) => String(estimate.notice || '').trim())
+    .filter(Boolean)));
+
+  return normalizeRouteEstimate({
+    provider: Array.from(new Set(validEstimates.map((estimate) => String(estimate.provider || 'unknown')))).join('+') || 'unknown',
+    travelMethod,
+    profile: String(validEstimates[0]?.profile || MAPBOX_PROFILE_BY_METHOD[travelMethod] || 'walking'),
+    distanceKm: validEstimates.reduce((sum, estimate) => sum + Number(estimate.distanceKm || 0), 0),
+    durationMinutes: validEstimates.reduce((sum, estimate) => sum + Number(estimate.durationMinutes || 0), 0),
+    geometry,
+    legs: validEstimates.flatMap((estimate) => Array.isArray(estimate.legs) ? estimate.legs : []),
+    isScheduleAware: validEstimates.some((estimate) => estimate.isScheduleAware),
+    isMock: validEstimates.some((estimate) => estimate.isMock),
+    unavailable: validEstimates.some((estimate) => estimate.unavailable),
+    notice: notices.join(' '),
+    departureTimeIso: validEstimates[0]?.departureTimeIso,
+    arrivalTimeIso: validEstimates[validEstimates.length - 1]?.arrivalTimeIso,
+    transferCount: validEstimates.reduce((sum, estimate) => sum + Number(estimate.transferCount || 0), 0),
+    walkMinutes: validEstimates.reduce((sum, estimate) => sum + Number(estimate.walkMinutes || 0), 0),
+    waitMinutes: validEstimates.reduce((sum, estimate) => sum + Number(estimate.waitMinutes || 0), 0),
+    transitLegs: validEstimates.flatMap((estimate) => Array.isArray(estimate.transitLegs) ? estimate.transitLegs : []),
+  });
+}
+
+function buildMockMultiStopRoute(stops, travelMethod) {
+  const segments = [];
+
+  for (let index = 0; index < stops.length - 1; index += 1) {
+    segments.push(buildMockRoute(stops[index], stops[index + 1], travelMethod));
+  }
+
+  return mergeRouteEstimates(segments, travelMethod);
+}
+
+async function getSequentialTransitRouteEstimate(stops, dateTime) {
+  const segments = [];
+  let nextDepartureIso = toIsoString(dateTime || new Date());
+
+  for (let index = 0; index < stops.length - 1; index += 1) {
+    const estimate = await getTransitRouteEstimate({
+      origin: stops[index],
+      destination: stops[index + 1],
+      dateTime: nextDepartureIso,
+    });
+
+    segments.push(estimate);
+    nextDepartureIso = estimate?.arrivalTimeIso || nextDepartureIso;
+  }
+
+  return mergeRouteEstimates(segments, 'transit');
 }
 
 function asOtpTimeIso(value) {
@@ -839,6 +953,15 @@ export async function getTransitRouteEstimate({ origin, destination, dateTime = 
     });
   }
 
+  if (isOtpEndpointCoolingDown(otpBaseUrl)) {
+    return buildMockTransitRoute(origin, destination, {
+      dateTime,
+      reason: 'otp-request-failed',
+      detail: 'OTP recently timed out or was unreachable. Using temporary fast fallback.',
+      unavailable: true,
+    });
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -889,6 +1012,10 @@ export async function getTransitRouteEstimate({ origin, destination, dateTime = 
     throw lastError || new Error('otp-request-failed');
   } catch (error) {
     console.warn('OTP transit routing unavailable, using mock transit fallback:', error);
+    if (error?.name === 'AbortError' || String(error?.message || '').includes('Failed to fetch') || String(error?.message || '').includes('NetworkError') || String(error?.message || '') === 'otp-request-failed') {
+      rememberOtpEndpointFailure(otpBaseUrl);
+    }
+
     let fallbackReason = 'otp-request-failed';
     const fallbackDetail = formatTransitErrorDetail(error);
     if (error?.name === 'AbortError') {
@@ -1006,24 +1133,37 @@ function normalizeRouteEstimate(raw) {
   };
 }
 
-export async function getRouteEstimate({ origin, destination, travelMethod = 'walk', dateTime }) {
+export async function getRouteEstimate({ origin, destination, locations = [], travelMethod = 'walk', dateTime }) {
   if (!origin || !destination) {
     throw new Error('Origin and destination are required for route estimation.');
   }
 
+  const stops = normalizeRouteStops({ origin, destination, locations });
+  if (stops.length < 2) {
+    throw new Error('At least two route stops are required for route estimation.');
+  }
+
   if (travelMethod === 'transit') {
-    return getTransitRouteEstimate({ origin, destination, dateTime });
+    if (stops.length === 2) {
+      return getTransitRouteEstimate({ origin: stops[0], destination: stops[1], dateTime });
+    }
+
+    return getSequentialTransitRouteEstimate(stops, dateTime);
   }
 
   const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
   const forceMock = import.meta.env.VITE_USE_MOCK_ROUTING !== 'false';
 
   if (forceMock || !mapboxToken) {
-    return buildMockRoute(origin, destination, travelMethod);
+    if (stops.length === 2) {
+      return buildMockRoute(stops[0], stops[1], travelMethod);
+    }
+
+    return buildMockMultiStopRoute(stops, travelMethod);
   }
 
   const profile = MAPBOX_PROFILE_BY_METHOD[travelMethod] || 'walking';
-  const coordinates = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
+  const coordinates = stops.map((stop) => `${stop.lng},${stop.lat}`).join(';');
 
   const params = new URLSearchParams({
     geometries: 'geojson',

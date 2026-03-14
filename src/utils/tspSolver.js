@@ -10,10 +10,19 @@ export class TSPSolver {
         this.bufferTime = options.bufferTime || 15; // minutes between stops
         this.startTime = options.startTime || "09:00";
         this.startDateTime = options.startDateTime || '';
+        this.shouldCancel = typeof options.shouldCancel === 'function'
+            ? options.shouldCancel
+            : null;
         this.travelTimeProvider = typeof options.travelTimeProvider === 'function'
             ? options.travelTimeProvider
             : null;
         this.lastSolveMeta = null;
+    }
+
+    throwIfCancelled() {
+        if (this.shouldCancel?.()) {
+            throw new Error('optimization-cancelled');
+        }
     }
 
     // Calculate distance between two points in km (Haversine formula)
@@ -42,6 +51,8 @@ export class TSPSolver {
     }
 
     async getTravelTime(p1, p2, departureAbsoluteMinutes = null) {
+        this.throwIfCancelled();
+
         if (this.travelTimeProvider) {
             try {
                 const provided = await this.travelTimeProvider({
@@ -144,8 +155,150 @@ export class TSPSolver {
         return Math.min(5, Math.max(1, Math.round(priority)));
     }
 
+    materializePath(path, options = {}) {
+        const includeFirstLegFromStart = Boolean(options?.includeFirstLegFromStart);
+
+        return (Array.isArray(path) ? path : []).map((step, index) => ({
+            ...step.node,
+            arrivalTime: this.minutesToTime(step.evaluated.arrival),
+            departureTime: this.minutesToTime(step.evaluated.arrival + step.evaluated.duration),
+            arrivalAbsoluteMinutes: step.evaluated.arrival,
+            departureAbsoluteMinutes: step.evaluated.arrival + step.evaluated.duration,
+            waitTime: step.evaluated.waitTime,
+            travelFromPrevious: step.evaluated.travelTime,
+            firstLegFromStart: includeFirstLegFromStart && index === 0 && step.evaluated.travelTime > 0,
+        }));
+    }
+
+    buildCandidateRecord({
+        mode,
+        path,
+        totalPriority = 0,
+        totalTravelMinutes = 0,
+        totalWaitMinutes = 0,
+        budgetUsed = null,
+        budgetLimit = null,
+        remaining = [],
+        includeFirstLegFromStart = false,
+    }) {
+        if (!Array.isArray(path) || path.length === 0) {
+            return null;
+        }
+
+        const itinerary = this.materializePath(path, { includeFirstLegFromStart });
+        const sequenceKey = path.map((step) => step.node?.id || 'unknown').join('>');
+        const startMinutes = this.timeToMinutes(this.startTime);
+        const lastStep = path[path.length - 1];
+        const elapsedMinutes = Number.isFinite(startMinutes)
+            ? Math.max(0, Math.round((lastStep.evaluated.arrival + lastStep.evaluated.duration) - startMinutes))
+            : Math.max(0, Math.round(Number(budgetUsed) || 0));
+
+        return {
+            id: `${mode}-${sequenceKey}`,
+            sequenceKey,
+            mode,
+            completedCount: itinerary.length,
+            totalPriority: Math.max(0, Math.round(Number(totalPriority) || 0)),
+            totalTravelMinutes: Math.max(0, Math.round(Number(totalTravelMinutes) || 0)),
+            totalWaitMinutes: Math.max(0, Math.round(Number(totalWaitMinutes) || 0)),
+            elapsedMinutes,
+            budgetUsedMinutes: Number.isFinite(Number(budgetUsed))
+                ? Math.max(0, Math.round(Number(budgetUsed)))
+                : elapsedMinutes,
+            budgetRemainingMinutes: Number.isFinite(Number(budgetLimit))
+                ? Math.max(0, Math.round(Number(budgetLimit) - (Number.isFinite(Number(budgetUsed)) ? Number(budgetUsed) : elapsedMinutes)))
+                : null,
+            unscheduledCount: Array.isArray(remaining) ? remaining.length : 0,
+            itinerary,
+        };
+    }
+
+    compareShortestCandidates(a, b) {
+        if (!a && !b) return 0;
+        if (!a) return 1;
+        if (!b) return -1;
+
+        if (a.completedCount !== b.completedCount) {
+            return b.completedCount - a.completedCount;
+        }
+
+        if (a.elapsedMinutes !== b.elapsedMinutes) {
+            return a.elapsedMinutes - b.elapsedMinutes;
+        }
+
+        if (a.totalWaitMinutes !== b.totalWaitMinutes) {
+            return a.totalWaitMinutes - b.totalWaitMinutes;
+        }
+
+        if (a.totalTravelMinutes !== b.totalTravelMinutes) {
+            return a.totalTravelMinutes - b.totalTravelMinutes;
+        }
+
+        return a.sequenceKey.localeCompare(b.sequenceKey);
+    }
+
+    compareBudgetCandidates(a, b) {
+        if (!a && !b) return 0;
+        if (!a) return 1;
+        if (!b) return -1;
+
+        if (a.totalPriority !== b.totalPriority) {
+            return b.totalPriority - a.totalPriority;
+        }
+
+        if (a.completedCount !== b.completedCount) {
+            return b.completedCount - a.completedCount;
+        }
+
+        if (a.budgetUsedMinutes !== b.budgetUsedMinutes) {
+            return a.budgetUsedMinutes - b.budgetUsedMinutes;
+        }
+
+        if (a.totalTravelMinutes !== b.totalTravelMinutes) {
+            return a.totalTravelMinutes - b.totalTravelMinutes;
+        }
+
+        if (a.totalWaitMinutes !== b.totalWaitMinutes) {
+            return a.totalWaitMinutes - b.totalWaitMinutes;
+        }
+
+        return a.sequenceKey.localeCompare(b.sequenceKey);
+    }
+
+    upsertCandidate(registry, candidate, compareCandidates, limit = 12) {
+        if (!(registry instanceof Map) || !candidate || typeof compareCandidates !== 'function') {
+            return;
+        }
+
+        const existing = registry.get(candidate.sequenceKey);
+        if (!existing || compareCandidates(candidate, existing) < 0) {
+            registry.set(candidate.sequenceKey, candidate);
+        }
+
+        const ranked = Array.from(registry.values()).sort((left, right) => compareCandidates(left, right));
+        while (ranked.length > limit) {
+            const removed = ranked.pop();
+            if (removed) {
+                registry.delete(removed.sequenceKey);
+            }
+        }
+    }
+
+    getAlternativeCandidates(registry, selectedSequenceKey, compareCandidates, limit = 5) {
+        if (!(registry instanceof Map) || typeof compareCandidates !== 'function') {
+            return [];
+        }
+
+        return Array.from(registry.values())
+            .filter((candidate) => candidate.sequenceKey !== selectedSequenceKey)
+            .sort((left, right) => compareCandidates(left, right))
+            .slice(0, limit);
+    }
+
     async evaluateCandidate(currentPos, currentTime, candidate) {
+        this.throwIfCancelled();
         const travelTime = await this.getTravelTime(currentPos, candidate, currentTime);
+        this.throwIfCancelled();
         const baseArrival = currentTime + travelTime + this.bufferTime;
         const windowResult = this.alignArrivalToOpeningWindow(baseArrival, candidate);
 
@@ -190,102 +343,185 @@ export class TSPSolver {
 
     async solveShortestFeasible() {
         if (this.locations.length === 0) return [];
+        this.throwIfCancelled();
 
-        let unvisited = [...this.locations];
-        let currentPos = unvisited.shift(); // Start from the first location (usually hotel/start point)
-        let currentTime = this.timeToMinutes(this.startTime);
-        const firstDuration = this.getDuration(currentPos);
-
-        const itinerary = [{
-            ...currentPos,
-            arrivalTime: this.startTime,
-            departureTime: this.minutesToTime(currentTime + firstDuration),
-            arrivalAbsoluteMinutes: currentTime,
-            departureAbsoluteMinutes: currentTime + firstDuration,
-            waitTime: 0
+        const startAnchor = this.locations[0];
+        const tripStartMinutes = this.timeToMinutes(this.startTime);
+        const firstDuration = this.getDuration(startAnchor);
+        const initialPath = [{
+            node: startAnchor,
+            evaluated: {
+                isValid: true,
+                travelTime: 0,
+                waitTime: 0,
+                arrival: tripStartMinutes,
+                duration: firstDuration,
+                addedTime: firstDuration,
+                statusReason: null,
+            },
         }];
 
-        currentTime += firstDuration;
+        const remaining = this.locations.slice(1);
+        const compareCandidates = this.compareShortestCandidates.bind(this);
+        const candidateRegistry = new Map();
+        const visitedStateQuality = new Map();
 
-        while (unvisited.length > 0) {
-            let bestNext = null;
-            let minCost = Infinity;
-            let nextArrivalTime = 0;
-            let nextWaitTime = 0;
-            let nextTravelTime = 0;
-            const candidateReasons = new Map();
+        let bestState = {
+            currentPos: startAnchor,
+            currentTime: tripStartMinutes + firstDuration,
+            remaining,
+            path: initialPath,
+            totalTravelMinutes: 0,
+            totalWaitMinutes: 0,
+            totalPriority: this.getPriority(startAnchor),
+        };
 
-            for (let i = 0; i < unvisited.length; i++) {
-                const candidate = unvisited[i];
-                const evaluated = await this.evaluateCandidate(currentPos, currentTime, candidate);
-
-                if (evaluated?.isValid) {
-                    // Cost function: travel time + wait time (greedy)
-                    const cost = evaluated.travelTime + evaluated.waitTime;
-                    if (cost < minCost) {
-                        minCost = cost;
-                        bestNext = i;
-                        nextArrivalTime = evaluated.arrival;
-                        nextWaitTime = evaluated.waitTime;
-                        nextTravelTime = evaluated.travelTime;
-                    }
-                } else if (evaluated?.statusReason) {
-                    candidateReasons.set(candidate.id, evaluated.statusReason);
-                }
-            }
-
-            if (bestNext === null) {
-                // No valid next location found that respects time windows
-                console.warn("Could not find a valid next stop respecting opening hours.");
-
-                const unscheduledStops = unvisited.map((stop) => ({
-                    ...stop,
-                    statusReason: candidateReasons.get(stop.id) || 'opening-window-conflict',
-                }));
-
-                this.lastSolveMeta = {
-                    mode: 'shortest-feasible',
-                    completedCount: itinerary.length,
-                    droppedCount: unvisited.length,
-                    totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
-                    unscheduledStops,
-                };
-                itinerary.unscheduledStops = unscheduledStops;
-                break;
-            }
-
-            const nextNode = unvisited.splice(bestNext, 1)[0];
-            const nextDuration = this.getDuration(nextNode);
-            itinerary.push({
-                ...nextNode,
-                arrivalTime: this.minutesToTime(nextArrivalTime),
-                departureTime: this.minutesToTime(nextArrivalTime + nextDuration),
-                arrivalAbsoluteMinutes: nextArrivalTime,
-                departureAbsoluteMinutes: nextArrivalTime + nextDuration,
-                waitTime: nextWaitTime,
-                travelFromPrevious: nextTravelTime
+        const registerState = (state) => {
+            const candidate = this.buildCandidateRecord({
+                mode: 'shortest-feasible',
+                path: state.path,
+                totalPriority: state.totalPriority,
+                totalTravelMinutes: state.totalTravelMinutes,
+                totalWaitMinutes: state.totalWaitMinutes,
+                remaining: state.remaining,
             });
 
-            currentTime = nextArrivalTime + nextDuration;
-            currentPos = nextNode;
-        }
+            this.upsertCandidate(candidateRegistry, candidate, compareCandidates, 12);
 
-        if (!this.lastSolveMeta || this.lastSolveMeta.mode !== 'shortest-feasible') {
-            this.lastSolveMeta = {
+            const bestCandidate = this.buildCandidateRecord({
                 mode: 'shortest-feasible',
-                completedCount: itinerary.length,
-                droppedCount: unvisited.length,
-                totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
-                unscheduledStops: [],
-            };
-            itinerary.unscheduledStops = [];
-        }
+                path: bestState.path,
+                totalPriority: bestState.totalPriority,
+                totalTravelMinutes: bestState.totalTravelMinutes,
+                totalWaitMinutes: bestState.totalWaitMinutes,
+                remaining: bestState.remaining,
+            });
+
+            if (!bestCandidate || compareCandidates(candidate, bestCandidate) < 0) {
+                bestState = {
+                    currentPos: state.currentPos,
+                    currentTime: state.currentTime,
+                    remaining: [...state.remaining],
+                    path: [...state.path],
+                    totalTravelMinutes: state.totalTravelMinutes,
+                    totalWaitMinutes: state.totalWaitMinutes,
+                    totalPriority: state.totalPriority,
+                };
+            }
+        };
+
+        const dfs = async (state) => {
+            this.throwIfCancelled();
+            registerState(state);
+
+            if (state.remaining.length === 0) {
+                return;
+            }
+
+            const stateKey = `${state.currentPos?.id || 'none'}::${Math.floor(state.currentTime / 15)}::${state.remaining.map((loc) => loc.id).sort().join('|')}`;
+            const stateScore = (state.path.length * 100000) - (state.totalWaitMinutes * 100) - state.totalTravelMinutes;
+            const bestSeenScore = visitedStateQuality.get(stateKey);
+
+            if (Number.isFinite(bestSeenScore) && bestSeenScore >= stateScore) {
+                return;
+            }
+
+            visitedStateQuality.set(stateKey, stateScore);
+
+            const moves = [];
+            for (let index = 0; index < state.remaining.length; index++) {
+                this.throwIfCancelled();
+                const candidate = state.remaining[index];
+                const evaluated = await this.evaluateCandidate(state.currentPos, state.currentTime, candidate);
+                if (!evaluated?.isValid) continue;
+
+                moves.push({
+                    index,
+                    candidate,
+                    evaluated,
+                    score: evaluated.travelTime + evaluated.waitTime,
+                });
+            }
+
+            moves.sort((left, right) => {
+                if (left.score !== right.score) return left.score - right.score;
+                return left.evaluated.duration - right.evaluated.duration;
+            });
+
+            const branchLimit = Math.min(moves.length, 8);
+            for (let index = 0; index < branchLimit; index++) {
+                this.throwIfCancelled();
+                const move = moves[index];
+                const nextRemaining = [
+                    ...state.remaining.slice(0, move.index),
+                    ...state.remaining.slice(move.index + 1),
+                ];
+
+                await dfs({
+                    currentPos: move.candidate,
+                    currentTime: move.evaluated.arrival + move.evaluated.duration,
+                    remaining: nextRemaining,
+                    path: [...state.path, { node: move.candidate, evaluated: move.evaluated }],
+                    totalTravelMinutes: state.totalTravelMinutes + move.evaluated.travelTime,
+                    totalWaitMinutes: state.totalWaitMinutes + move.evaluated.waitTime,
+                    totalPriority: state.totalPriority + this.getPriority(move.candidate),
+                });
+            }
+        };
+
+        await dfs(bestState);
+        this.throwIfCancelled();
+
+        const itinerary = this.materializePath(bestState.path);
+        const scheduledIds = new Set(bestState.path.map((step) => step.node.id));
+        const referenceStep = bestState.path[bestState.path.length - 1];
+        const referencePos = referenceStep?.node || startAnchor;
+        const referenceTime = referenceStep
+            ? referenceStep.evaluated.arrival + referenceStep.evaluated.duration
+            : tripStartMinutes;
+
+        const unscheduledStops = await Promise.all(this.locations
+            .filter((stop) => !scheduledIds.has(stop.id))
+            .map(async (stop) => {
+                this.throwIfCancelled();
+                const evaluated = await this.evaluateCandidate(referencePos, referenceTime, stop);
+                return {
+                    ...stop,
+                    statusReason: evaluated?.isValid
+                        ? 'not-selected-by-feasible-search'
+                        : (evaluated?.statusReason || 'opening-window-conflict'),
+                };
+            }));
+
+        const selectedCandidate = this.buildCandidateRecord({
+            mode: 'shortest-feasible',
+            path: bestState.path,
+            totalPriority: bestState.totalPriority,
+            totalTravelMinutes: bestState.totalTravelMinutes,
+            totalWaitMinutes: bestState.totalWaitMinutes,
+            remaining: bestState.remaining,
+        });
+
+        this.lastSolveMeta = {
+            mode: 'shortest-feasible',
+            searchStrategy: 'depth-first-feasible-search',
+            completedCount: itinerary.length,
+            droppedCount: unscheduledStops.length,
+            totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
+            totalTravelMinutes: bestState.totalTravelMinutes,
+            totalWaitMinutes: bestState.totalWaitMinutes,
+            selectedCandidate,
+            topCandidates: this.getAlternativeCandidates(candidateRegistry, selectedCandidate?.sequenceKey, compareCandidates, 5),
+            unscheduledStops,
+        };
+        itinerary.unscheduledStops = unscheduledStops;
 
         return itinerary;
     }
 
     async solveMaxPriorityWithinBudget(timeBudgetMinutes = 240) {
         if (this.locations.length === 0) return [];
+        this.throwIfCancelled();
 
         const budgetLimit = Math.max(1, Math.round(Number(timeBudgetMinutes) || 240));
         const startAnchor = this.locations[0];
@@ -322,6 +558,9 @@ export class TSPSolver {
             return optimisticPriority;
         };
 
+        const compareCandidates = this.compareBudgetCandidates.bind(this);
+        const candidateRegistry = new Map();
+
         const isBetterSolution = (candidate, incumbent) => {
             if (!incumbent) return true;
             if (candidate.totalPriority !== incumbent.totalPriority) {
@@ -330,14 +569,21 @@ export class TSPSolver {
             if (candidate.path.length !== incumbent.path.length) {
                 return candidate.path.length > incumbent.path.length;
             }
-            return candidate.budgetUsed < incumbent.budgetUsed;
+            if (candidate.budgetUsed !== incumbent.budgetUsed) {
+                return candidate.budgetUsed < incumbent.budgetUsed;
+            }
+            if (candidate.totalTravelMinutes !== incumbent.totalTravelMinutes) {
+                return candidate.totalTravelMinutes < incumbent.totalTravelMinutes;
+            }
+            return candidate.totalWaitMinutes < incumbent.totalWaitMinutes;
         };
 
         const visitedStatePriority = new Map();
         let best = null;
 
-        const dfs = async (currentPos, currentTime, budgetUsed, totalPriority, remaining, path) => {
-            const partial = { totalPriority, budgetUsed, path };
+        const dfs = async (currentPos, currentTime, budgetUsed, totalPriority, remaining, path, totalTravelMinutes, totalWaitMinutes) => {
+            this.throwIfCancelled();
+            const partial = { totalPriority, budgetUsed, path, totalTravelMinutes, totalWaitMinutes };
             if (isBetterSolution(partial, best)) {
                 best = {
                     totalPriority,
@@ -346,8 +592,22 @@ export class TSPSolver {
                     currentPos,
                     currentTime,
                     remaining: [...remaining],
+                    totalTravelMinutes,
+                    totalWaitMinutes,
                 };
             }
+
+            this.upsertCandidate(candidateRegistry, this.buildCandidateRecord({
+                mode: 'max-priority-budget',
+                path,
+                totalPriority,
+                totalTravelMinutes,
+                totalWaitMinutes,
+                budgetUsed,
+                budgetLimit,
+                remaining,
+                includeFirstLegFromStart: true,
+            }), compareCandidates, 12);
 
             if (remaining.length === 0) return;
 
@@ -367,6 +627,7 @@ export class TSPSolver {
             const moves = [];
 
             for (let i = 0; i < remaining.length; i++) {
+                this.throwIfCancelled();
                 const candidate = remaining[i];
                 const evaluated = await this.evaluateCandidate(currentPos, currentTime, candidate);
                 if (!evaluated?.isValid) continue;
@@ -383,6 +644,8 @@ export class TSPSolver {
                     evaluated,
                     projectedBudget,
                     projectedPriority: totalPriority + priority,
+                    projectedTravelMinutes: totalTravelMinutes + evaluated.travelTime,
+                    projectedWaitMinutes: totalWaitMinutes + evaluated.waitTime,
                     score,
                 });
             }
@@ -391,6 +654,7 @@ export class TSPSolver {
             moves.sort((a, b) => b.score - a.score);
 
             for (let i = 0; i < moves.length; i++) {
+                this.throwIfCancelled();
                 const move = moves[i];
                 const nextRemaining = [
                     ...remaining.slice(0, move.index),
@@ -403,12 +667,15 @@ export class TSPSolver {
                     move.projectedBudget,
                     move.projectedPriority,
                     nextRemaining,
-                    [...path, { node: move.candidate, evaluated: move.evaluated }]
+                    [...path, { node: move.candidate, evaluated: move.evaluated }],
+                    move.projectedTravelMinutes,
+                    move.projectedWaitMinutes,
                 );
             }
         };
 
         for (let i = 0; i < locations.length; i++) {
+            this.throwIfCancelled();
             const first = locations[i];
             const firstTravelMinutes = (startAnchor && startAnchor.id !== first.id)
                 ? await this.getTravelTime(startAnchor, first, tripStartMinutes)
@@ -443,9 +710,12 @@ export class TSPSolver {
                 firstAddedTime,
                 this.getPriority(first),
                 remaining,
-                [{ node: first, evaluated: firstEvaluated }]
+                [{ node: first, evaluated: firstEvaluated }],
+                firstEvaluated.travelTime,
+                firstEvaluated.waitTime,
             );
         }
+        this.throwIfCancelled();
 
         if (!best || best.path.length === 0) {
             const unscheduledStops = locations.map((stop) => ({
@@ -463,6 +733,8 @@ export class TSPSolver {
                 droppedCount: locations.length,
                 totalPriority: 0,
                 droppedStopIds: locations.map((stop) => stop.id),
+                selectedCandidate: null,
+                topCandidates: [],
                 unscheduledStops,
             };
 
@@ -488,16 +760,7 @@ export class TSPSolver {
             strictBudgetUsed = projectedBudget;
         }
 
-        const itinerary = acceptedPath.map((step, index) => ({
-            ...step.node,
-            arrivalTime: this.minutesToTime(step.evaluated.arrival),
-            departureTime: this.minutesToTime(step.evaluated.arrival + step.evaluated.duration),
-            arrivalAbsoluteMinutes: step.evaluated.arrival,
-            departureAbsoluteMinutes: step.evaluated.arrival + step.evaluated.duration,
-            waitTime: step.evaluated.waitTime,
-            travelFromPrevious: step.evaluated.travelTime,
-            firstLegFromStart: index === 0 && step.evaluated.travelTime > 0,
-        }));
+        const itinerary = this.materializePath(acceptedPath, { includeFirstLegFromStart: true });
 
         const scheduledIds = new Set(acceptedPath.map((step) => step.node.id));
         const overflowIds = new Set(overflowPath.map((step) => step.node.id));
@@ -511,6 +774,7 @@ export class TSPSolver {
         const unscheduledStops = await Promise.all(locations
             .filter((stop) => !scheduledIds.has(stop.id))
             .map(async (stop) => {
+                this.throwIfCancelled();
                 if (overflowIds.has(stop.id)) {
                     const overflowStep = overflowPath.find((step) => step.node.id === stop.id);
                     const overflowReason = this.getBudgetOverflowReason(
@@ -542,6 +806,18 @@ export class TSPSolver {
                 };
             }));
 
+        const selectedCandidate = this.buildCandidateRecord({
+            mode: 'max-priority-budget',
+            path: acceptedPath,
+            totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
+            totalTravelMinutes: best.totalTravelMinutes,
+            totalWaitMinutes: best.totalWaitMinutes,
+            budgetUsed: strictBudgetUsed,
+            budgetLimit,
+            remaining: unscheduledStops,
+            includeFirstLegFromStart: true,
+        });
+
         this.lastSolveMeta = {
             mode: 'max-priority-budget',
             searchStrategy: 'dfs-backtracking-pruning',
@@ -552,6 +828,10 @@ export class TSPSolver {
             droppedCount: unscheduledStops.length,
             totalPriority: itinerary.reduce((sum, stop) => sum + this.getPriority(stop), 0),
             droppedStopIds: unscheduledStops.map((stop) => stop.id),
+            totalTravelMinutes: best.totalTravelMinutes,
+            totalWaitMinutes: best.totalWaitMinutes,
+            selectedCandidate,
+            topCandidates: this.getAlternativeCandidates(candidateRegistry, selectedCandidate?.sequenceKey, compareCandidates, 5),
             unscheduledStops,
         };
         itinerary.unscheduledStops = unscheduledStops;
