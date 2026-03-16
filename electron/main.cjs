@@ -8,6 +8,14 @@ const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const extract = require('extract-zip');
 
+const APP_PRODUCT_NAME = 'TripOptimizer';
+const APP_USER_MODEL_ID = 'com.anitigravity.tripoptimizer';
+
+app.setName(APP_PRODUCT_NAME);
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
+
 const DEFAULT_OTP_VERSION = '2.8.1';
 const DEFAULT_OTP_SERIALIZATION_VERSION_ID = '203';
 const OTP_VERSION = String(process.env.TRIPOPTIMIZER_MANAGED_OTP_VERSION || DEFAULT_OTP_VERSION).trim() || DEFAULT_OTP_VERSION;

@@ -1,10 +1,19 @@
 {
-  "name": "anitigravity-workspace-2---ai-planner",
-  "private": true,
+  "name": "Trip Optimizer",
+  "description": "Map-first trip planner with itinerary optimization and optional desktop OTP transit routing.",
+  "author": "Chi Ho Li",
   "license": "Apache-2.0",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "main": "electron/main.cjs",
   "type": "module",
+  "keywords": [
+    "trip-planning",
+    "route-optimization",
+    "electron",
+    "react",
+    "leaflet",
+    "opentripplanner"
+  ],
   "scripts": {
     "dev": "vite",
     "dev:web": "vite",
@@ -44,7 +53,8 @@
   },
   "build": {
     "appId": "com.anitigravity.tripoptimizer",
-    "productName": "TripOptimizer",
+    "productName": "Trip Optimizer",
+    "executableName": "Trip Optimizer",
     "directories": {
       "output": "release"
     },
@@ -69,6 +79,14 @@
         "nsis",
         "portable"
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Trip Optimizer"
     }
   }
 }

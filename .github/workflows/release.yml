@@ -1,0 +1,61 @@
+name: Release Builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Build Windows desktop packages
+        run: npm run build:desktop
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tripoptimizer-web-dist
+          path: dist/**
+          if-no-files-found: error
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tripoptimizer-windows-builds
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

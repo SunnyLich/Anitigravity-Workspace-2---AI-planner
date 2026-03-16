@@ -13,6 +13,12 @@ npm install
 npm run dev
 ```
 
+Platform-specific entry points are now labeled explicitly:
+
+- Web entry: `src/platform/web/main.jsx`
+- Desktop bridge: `src/platform/desktop/otpDesktop.js`
+- Shared UI and planner logic remain in `src/`
+
 3. Validate baseline manually:
 - Map and planner window render.
 - POI overlay appears.

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Compass, Search, CalendarCheck, Settings, MapPin } from 'lucide-react';
 import { TripFormWindow, WindowWrapper } from './components/TripFormWindow';
 import ItineraryWindow from './components/ItineraryWindow';
 import MapDisplay from './components/MapDisplay';
 import { TSPSolver } from './utils/tspSolver';
 import { createTransitTravelTimeCache, getRouteEstimate } from './services/mapboxRouting';
-import { ensureDesktopOtpRunning, getDesktopOtpStatus, isDesktopOtpManagerAvailable, stopDesktopOtpRuntime } from './services/otpDesktop';
+import { ensureDesktopOtpRunning, getDesktopOtpStatus, isDesktopOtpManagerAvailable, stopDesktopOtpRuntime } from './platform/desktop/otpDesktop';
 import { reverseGeocodeLocation } from './services/nominatim';
 import { createCustomLocation, normalizeLocation } from './utils/locationModel';
 import { getDefaultRouteColor } from './utils/routeAppearance';
@@ -185,6 +185,14 @@ function App() {
   });
   const [customNodeDraft, setCustomNodeDraft] = useState({ open: false, lat: null, lng: null, name: '', note: '' });
   const otpAutoStartAttemptedRef = useRef(false);
+
+  const installAndRunManagedOtp = useCallback(async () => {
+    const status = await ensureDesktopOtpRunning(resolveOtpBaseUrl(otpBaseUrl));
+    setOtpRuntimeStatus(status);
+    setUseMockTransit(false);
+    setOtpBaseUrl(status.baseUrl || DEFAULT_MANAGED_OTP_BASE_URL);
+    return status;
+  }, [otpBaseUrl]);
 
   // Window Visibility State
   const [windows, setWindows] = useState({
@@ -524,7 +532,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [otpBaseUrl, tripSessionHydrated]);
+  }, [installAndRunManagedOtp, otpBaseUrl, tripSessionHydrated]);
 
   useEffect(() => {
     if (!tripSessionHydrated) return;
@@ -633,14 +641,6 @@ function App() {
       const sameLng = Number(previous.lng) === Number(location.lng);
       return sameLat && sameLng ? null : previous;
     });
-  };
-
-  const installAndRunManagedOtp = async () => {
-    const status = await ensureDesktopOtpRunning(resolveOtpBaseUrl(otpBaseUrl));
-    setOtpRuntimeStatus(status);
-    setUseMockTransit(false);
-    setOtpBaseUrl(status.baseUrl || DEFAULT_MANAGED_OTP_BASE_URL);
-    return status;
   };
 
   const addLocationToTrip = (rawLocation, options = {}) => {

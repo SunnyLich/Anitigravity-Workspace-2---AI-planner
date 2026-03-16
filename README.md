@@ -1,8 +1,27 @@
 # TripOptimizer
 
-TripOptimizer is a map-first trip planning prototype for London, Ontario. It combines local POI search, saved custom locations, route estimation, and itinerary optimization in a single React + Leaflet interface.
+TripOptimizer is a map-first trip planner for London, Ontario. It combines local POI search, saved custom locations, route estimation, itinerary optimization, and an optional desktop-managed OTP transit runtime in a single React + Leaflet interface.
 
-The repository is best understood as a polished planning prototype: the core workflow is implemented, the app builds for production, and the remaining work is focused on routing fidelity, solver hardening, and repo-level quality rather than basic feature scaffolding.
+This repository is currently suitable as a public preview release: the core planning workflow is implemented, the web build passes, the desktop app loads the production renderer correctly, and the remaining work is primarily around deeper testing, routing realism, and polish rather than missing core scaffolding.
+
+## How To Share It
+
+Use GitHub for two separate things:
+
+- Source code stays in the repository.
+- End-user downloads should come from GitHub Actions artifacts or GitHub Releases, not from asking users to run the repo locally.
+
+This repo now includes:
+
+- CI validation in `.github/workflows/ci.yml`
+- release build automation in `.github/workflows/release.yml`
+
+Recommended flow:
+
+1. Push source code to GitHub.
+2. Run the `Release Builds` workflow manually, or push a tag like `v1.0.1`.
+3. Share the generated desktop `.exe` files from GitHub Releases.
+4. Optionally deploy the `dist/` web artifact separately if you want a hosted browser version.
 
 ## What the app does today
 
@@ -26,7 +45,15 @@ The core product loop is already in place:
 4. Estimate routes or optimize a visit order.
 5. Review the resulting itinerary on the map and in the itinerary panel.
 
-What is still in progress is the realism layer around that loop: higher-quality fallback routing, stronger schedule-feasibility logic, richer POI details, and better public-repo quality signals such as tests and CI.
+What is still in progress is the realism layer around that loop: higher-quality fallback routing, stronger schedule-feasibility logic, richer POI details, and broader automated test coverage.
+
+## Release status
+
+- Public preview / release candidate
+- Web build and lint are expected to pass locally and in CI
+- Windows desktop packaging is supported through Electron Builder
+- Transit mode can run entirely in mock mode or against a local OTP instance
+- GitHub Actions can build release artifacts separately from the source repository
 
 ## Stack
 
@@ -67,7 +94,9 @@ Artifacts are written to the `release/` folder.
 
 ## Environment configuration
 
-Create a local environment file in the project root.
+Create a local environment file in the project root. You can start from `.env.example`.
+
+The checked-in template is safe for public sharing and works without Mapbox by default.
 
 ### Mock routing only
 
@@ -106,9 +135,18 @@ TRIPOPTIMIZER_MANAGED_OTP_JAR_PATH=C:\path\to\otp-shaded-custom.jar
 
 Use these only when the bundled `graph.obj` was built with an OTP version that does not match the default managed runtime.
 
+## Platform layout
+
+- Web entry point: `src/platform/web/main.jsx`
+- Desktop bridge helpers: `src/platform/desktop/otpDesktop.js`
+- Electron shell: `electron/`
+- Shared planner UI and logic: `src/`
+
+The current repo still uses one shared React planner for both targets. The web and desktop versions are included together, but the platform-specific entry points are now labeled separately instead of being mixed into the same top-level source path.
+
 ## Repository status
 
-This repository is currently positioned as a working prototype and engineering showcase, not as a finished end-user product. The codebase is useful for demonstrating:
+This repository is currently positioned as a public preview and engineering showcase. The codebase is useful for demonstrating:
 
 - a map-centric planner UI
 - local-first search and location modeling
@@ -123,7 +161,7 @@ This repository is currently positioned as a working prototype and engineering s
 - The optimization flow is useful today, but schedule-feasibility behavior needs further hardening.
 - Search relevance is functional but still fairly simple.
 - The production bundle should be split more aggressively.
-- Repository quality signals such as automated tests and CI are not yet in place.
+- CI now validates lint and production web builds automatically, but deeper automated runtime and packaging coverage is still limited.
 
 ## Roadmap focus
 
@@ -135,10 +173,10 @@ Near-term work is concentrated on:
 
 ## Project references
 
-- Planning index: `PROJECT_TRACKER_SYSTEMATIC.md`
 - Working tracker: `PROJECT_TRACKER.md`
 - Product roadmap: `docs/roadmap.md`
 - Architecture overview: `docs/architecture.md`
 - Onboarding guide: `docs/onboarding.md`
+- User guide: `docs/user-guide.md`
 - Changelog: `docs/changelog.md`
 - ADRs: `docs/adr/`

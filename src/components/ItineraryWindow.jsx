@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Clock, Download, MapPin, CalendarCheck, Train, Play } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -154,14 +154,17 @@ const stopInteraction = (event) => {
 const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate, onToggleRouteVisibility, onRouteColorChange, onAnimateRoute, canAnimateRoute, windowStyle, isOpen, onClose, onMinimize }) => {
     const [selectedTransitDetail, setSelectedTransitDetail] = useState(null);
     const [routeColorDrafts, setRouteColorDrafts] = useState({});
+    const routeDraftScope = useMemo(() => (Array.isArray(itinerary)
+        ? itinerary.map((item, index) => [
+            item?.id || `stop-${index}`,
+            item?.arrivalAbsoluteMinutes ?? item?.arrivalTime ?? '',
+            item?.departureAbsoluteMinutes ?? item?.departureTime ?? '',
+        ].join(':')).join('|')
+        : 'empty'), [itinerary]);
     const absoluteTimeline = asAbsoluteTimeline(itinerary || []);
     const firstDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[0].arrivalAbs) : 0;
     const lastDayOffset = absoluteTimeline.length > 0 ? toDayOffset(absoluteTimeline[absoluteTimeline.length - 1].departureAbs) : 0;
     const totalDays = Math.max(1, (lastDayOffset - firstDayOffset) + 1);
-
-    useEffect(() => {
-        setRouteColorDrafts({});
-    }, [itinerary]);
 
     const openNativeTimePicker = (event) => {
         const input = event.currentTarget;
@@ -296,23 +299,27 @@ const ItineraryWindow = ({ itinerary, travelMethod, tripDate, onItineraryUpdate,
         });
     };
 
-    const getRouteDisplayColor = (item, index) => routeColorDrafts[index]
+    const getRouteDraftKey = (index) => `${routeDraftScope}:${index}`;
+
+    const getRouteDisplayColor = (item, index) => routeColorDrafts[getRouteDraftKey(index)]
         || item?.transitFromPrevious?.mapColor
         || getDefaultRouteColor(index);
 
     const previewRouteColor = (index, color) => {
+        const draftKey = getRouteDraftKey(index);
         setRouteColorDrafts((previous) => ({
             ...previous,
-            [index]: color,
+            [draftKey]: color,
         }));
     };
 
     const commitRouteColor = (index, color) => {
+        const draftKey = getRouteDraftKey(index);
         setRouteColorDrafts((previous) => {
-            if (!(index in previous)) return previous;
+            if (!(draftKey in previous)) return previous;
 
             const nextDrafts = { ...previous };
-            delete nextDrafts[index];
+            delete nextDrafts[draftKey];
             return nextDrafts;
         });
 

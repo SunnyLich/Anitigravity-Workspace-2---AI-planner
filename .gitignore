@@ -13,6 +13,9 @@ dist/
 release/
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
 
 # Local large/generated artifacts
 london ontario map.xml

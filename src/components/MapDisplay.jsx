@@ -150,8 +150,11 @@ const MapDisplay = ({
     onMapContextMenu,
     onMapClick,
 }) => {
-    const [animatedRoutePosition, setAnimatedRoutePosition] = useState(null);
-    const [animatedRouteHeading, setAnimatedRouteHeading] = useState(0);
+    const [animatedRouteState, setAnimatedRouteState] = useState({
+        trigger: 0,
+        position: null,
+        heading: 0,
+    });
     const points = useMemo(
         () => itinerary.map(item => ({ lat: item.lat, lng: item.lng })),
         [itinerary]
@@ -192,21 +195,36 @@ const MapDisplay = ({
     const hasRouteGeometry = Array.isArray(activeRouteGeometry) && activeRouteGeometry.length > 1;
     const routeSegmentCount = hasRouteGeometry ? activeRouteGeometry.length - 1 : 0;
     const center = points.length > 0 ? [points[0].lat, points[0].lng] : LONDON_ON;
+    const displayedAnimatedRoutePosition = useMemo(() => {
+        if (!routeAnimationTrigger || !hasRouteGeometry) return null;
+        if (animatedRouteState.trigger !== routeAnimationTrigger) {
+            return activeRouteGeometry[0];
+        }
+
+        return animatedRouteState.position;
+    }, [routeAnimationTrigger, hasRouteGeometry, animatedRouteState, activeRouteGeometry]);
+    const displayedAnimatedRouteHeading = useMemo(() => {
+        if (!routeAnimationTrigger || !hasRouteGeometry) return 0;
+        if (animatedRouteState.trigger !== routeAnimationTrigger) {
+            return getArrowHeadingDegrees(activeRouteGeometry[0], activeRouteGeometry[1]);
+        }
+
+        return animatedRouteState.heading;
+    }, [routeAnimationTrigger, hasRouteGeometry, animatedRouteState, activeRouteGeometry]);
     const animatedArrowIcon = useMemo(() => L.divIcon({
         className: '',
-        html: `<div style="font-size:24px;line-height:1;color:#f43f5e;text-shadow:0 0 8px rgba(15,23,42,0.85);transform:rotate(${animatedRouteHeading}deg);transform-origin:center center;">➜</div>`,
+        html: `<div style="font-size:24px;line-height:1;color:#f43f5e;text-shadow:0 0 8px rgba(15,23,42,0.85);transform:rotate(${displayedAnimatedRouteHeading}deg);transform-origin:center center;">➜</div>`,
         iconSize: [24, 24],
         iconAnchor: [12, 12],
-    }), [animatedRouteHeading]);
+    }), [displayedAnimatedRouteHeading]);
 
     useEffect(() => {
         if (!routeAnimationTrigger || !Array.isArray(activeRouteGeometry) || activeRouteGeometry.length < 2) {
-            setAnimatedRoutePosition(null);
-            setAnimatedRouteHeading(0);
             return undefined;
         }
 
         let frameId = 0;
+        const animationTrigger = routeAnimationTrigger;
         const totalSegments = activeRouteGeometry.length - 1;
         const durationMs = Math.min(12000, Math.max(2500, totalSegments * 120));
         const startedAt = performance.now();
@@ -218,20 +236,22 @@ const MapDisplay = ({
             const localProgress = Math.max(0, Math.min(1, segmentProgress - segmentIndex));
             const startPoint = activeRouteGeometry[segmentIndex];
             const endPoint = activeRouteGeometry[segmentIndex + 1];
+            const heading = getArrowHeadingDegrees(startPoint, endPoint);
 
-            setAnimatedRoutePosition([
-                startPoint[0] + ((endPoint[0] - startPoint[0]) * localProgress),
-                startPoint[1] + ((endPoint[1] - startPoint[1]) * localProgress),
-            ]);
-            setAnimatedRouteHeading(getArrowHeadingDegrees(startPoint, endPoint));
+            setAnimatedRouteState({
+                trigger: animationTrigger,
+                position: [
+                    startPoint[0] + ((endPoint[0] - startPoint[0]) * localProgress),
+                    startPoint[1] + ((endPoint[1] - startPoint[1]) * localProgress),
+                ],
+                heading,
+            });
 
             if (progress < 1) {
                 frameId = window.requestAnimationFrame(step);
             }
         };
 
-        setAnimatedRoutePosition(activeRouteGeometry[0]);
-        setAnimatedRouteHeading(getArrowHeadingDegrees(activeRouteGeometry[0], activeRouteGeometry[1]));
         frameId = window.requestAnimationFrame(step);
 
         return () => {
@@ -375,9 +395,9 @@ const MapDisplay = ({
                 })
             )}
 
-            {Array.isArray(animatedRoutePosition) && animatedRoutePosition.length === 2 && (
+            {Array.isArray(displayedAnimatedRoutePosition) && displayedAnimatedRoutePosition.length === 2 && (
                 <Marker
-                    position={animatedRoutePosition}
+                    position={displayedAnimatedRoutePosition}
                     icon={animatedArrowIcon}
                 />
             )}

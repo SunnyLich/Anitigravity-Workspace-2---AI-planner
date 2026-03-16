@@ -644,6 +644,63 @@
         "Transit-bearing itineraries are preferred over walk-only alternatives, with shorter duration used as the tiebreaker",
         "The visible route-color circle opens the color picker and updates the matching map overlay live"
       ]
+    },
+    {
+      "id": "SS-001",
+      "title": "Capture current end-user setup friction and supported trial paths",
+      "workstream": "setup-smoothing",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "S",
+      "owner": "unassigned",
+      "acceptance": [
+        "Docs explicitly describe today's desktop trial path as GitHub release download plus run",
+        "Docs explicitly describe today's source-code path as clone repo, npm install, local env setup, and localhost usage",
+        "Docs explicitly state that live Mapbox car routing requires a token but mock routing does not",
+        "Docs explicitly state that real web transit requires a reachable OTP backend and is not yet turnkey for end users"
+      ]
+    },
+    {
+      "id": "SS-002",
+      "title": "Reduce desktop end-user setup to download and first run only",
+      "workstream": "setup-smoothing",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "A user can download a packaged desktop build from GitHub Releases and launch it without cloning the repository",
+        "Core planner features work in default no-token mode without manual env editing",
+        "First-run guidance inside the app explains mock routing limits and how transit setup behaves"
+      ]
+    },
+    {
+      "id": "TR-021",
+      "title": "Make hosted web transit work against a supported OTP backend",
+      "workstream": "real-transit",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "L",
+      "owner": "unassigned",
+      "acceptance": [
+        "A hosted web deployment can request real transit itineraries without requiring end users to run OTP locally",
+        "The project documents the supported OTP hosting model, URL expectations, and any required proxy or CORS behavior",
+        "Web transit failure states stay understandable when the backend is unavailable or times out"
+      ]
+    },
+    {
+      "id": "TR-022",
+      "title": "Define browser-ready transit deployment architecture",
+      "workstream": "real-transit",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "The team chooses whether hosted web transit will use direct OTP browser access, a proxy API, or another supported server-side adapter",
+        "The chosen architecture addresses browser reachability, CORS, secrets handling, and operational ownership",
+        "The decision is reflected in docs and implementation planning"
+      ]
     }
   ]
 }

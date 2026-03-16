@@ -328,11 +328,8 @@ const TripFormWindow = ({
     }, [isTimeConstrainedMode, tripStartDate, tripStartTime, tripEndDate, tripEndTime, wakeTime, sleepTime]);
     const hasValidTimeframe = !isTimeConstrainedMode || timeframe.valid;
 
-    useEffect(() => {
-        if (visibleAlternatives.length === 0) {
-            setShowAlternativeRoutes(false);
-        }
-    }, [visibleAlternatives]);
+    const hasAlternativeRoutes = visibleAlternatives.length > 0;
+    const areAlternativeRoutesVisible = hasAlternativeRoutes && showAlternativeRoutes;
 
     if (!isOpen) return null;
 
@@ -748,13 +745,13 @@ const TripFormWindow = ({
                 <button
                     type="button"
                     onClick={() => setShowAlternativeRoutes(prev => !prev)}
-                    disabled={visibleAlternatives.length === 0}
+                    disabled={!hasAlternativeRoutes}
                     className="w-full bg-white/5 hover:bg-white/10 py-2.5 rounded-xl font-bold text-xs border border-border-glass transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                    {showAlternativeRoutes ? 'Hide Top 5 Other Routes Considered' : 'Show Top 5 Other Routes Considered'}
+                    {areAlternativeRoutesVisible ? 'Hide Top 5 Other Routes Considered' : 'Show Top 5 Other Routes Considered'}
                 </button>
 
-                {showAlternativeRoutes && visibleAlternatives.length > 0 && (
+                {areAlternativeRoutesVisible && (
                     <div className="glass-card p-3 space-y-3 border border-border-glass/80">
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Top Other Routes Considered</p>

@@ -1,6 +1,15 @@
 # Changelog
 
+## 2026-03-16
+- Added a public-safe `.env.example` template that defaults to mock routing and mock transit, leaves the Mapbox token blank, and documents the optional OTP desktop runtime overrides.
+- Added a user-facing setup and usage guide in `docs/user-guide.md` covering web mode, desktop mode, no-Mapbox usage, OTP transit setup, and troubleshooting.
+- Labeled platform-specific source entry points more clearly by moving the browser entry to `src/platform/web/main.jsx` and the desktop OTP bridge to `src/platform/desktop/otpDesktop.js`, while keeping the shared planner UI in `src/`.
+- Added a separate GitHub Actions release workflow so the repository can publish desktop build artifacts independently from the source code and optionally attach them to tagged GitHub Releases.
+
 ## 2026-03-14
+- Bumped source metadata to `1.0.0` and smoke-tested the existing Windows unpacked and portable desktop executables to confirm both stay running on startup without the previous renderer crash.
+- Prepared the repo for a public preview release by adding Apache 2.0 licensing metadata, promoting package metadata to a real 0.1.0 release candidate shape, expanding `.env.example` to match documented runtime options, cleaning up README release messaging, and adding a minimal GitHub Actions CI workflow for lint and web build validation.
+- Fixed the remaining React hook lint issues without changing planner behavior: route-color drafts are now scoped to the current itinerary instead of being reset in an effect, alternative-route visibility is derived from available results, map route animation now derives its initial display state while the effect only drives animation frames, and the managed OTP install/run helper is wrapped in a stable callback for desktop autostart.
 - Updated OTP itinerary selection to request multiple candidates and prefer the shortest option that actually contains a transit leg, instead of always accepting the first result even when it is effectively all walking.
 - Made the visible route-color circle own the color input so changing it updates the map route overlay live.
 - Tracking sync: added and completed `TR-020` in `planning/backlog.json`, and updated `real-transit` notes in `planning/workstreams.yaml`.
