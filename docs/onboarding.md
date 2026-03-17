@@ -27,7 +27,9 @@ Platform-specific entry points are now labeled explicitly:
   - `Optimize Schedule`
 - Test both optimization modes in planner.
 
-## Routing environment
+This baseline is still the inherited free-version provider implementation. Paid-version engineering work is currently focused on replacing that provider layer with Google Maps Platform, not on expanding the old OTP and Mapbox setup.
+
+## Current inherited routing environment
 - Mock mode (default):
   - `VITE_USE_MOCK_ROUTING=true`
 - Real Mapbox mode:
@@ -44,23 +46,33 @@ Platform-specific entry points are now labeled explicitly:
 - Desktop managed OTP defaults to OTP 2.8.1 and now validates the bundled `graph.obj` serialization id before launch.
 - If the bundled graph was built with a different OTP build, set `TRIPOPTIMIZER_MANAGED_OTP_JAR_PATH` or `TRIPOPTIMIZER_MANAGED_OTP_JAR_URL` together with `TRIPOPTIMIZER_MANAGED_OTP_SERIALIZATION_ID` for the Electron process.
 
-## Transit verification
-- Success path:
-  - Start OTP with GTFS + OSM data loaded.
-  - Select `transit` and run both route estimate and optimize flows.
-  - Confirm provider `otp` is visible and transit leg details render.
-- Timeout/unavailable path:
-  - Stop OTP or point `VITE_OTP_BASE_URL` to a dead endpoint.
-  - Confirm planner still shows a fallback estimate and an unavailable notice.
-- No-itinerary path:
-  - Test a time/location pair with no scheduled service.
-  - Confirm planner shows the no-itinerary fallback notice.
-- Regression check:
-  - Re-run walk and car route/optimization flows and confirm visible route estimates still render.
+## Paid-version migration target
+
+- Primary map surface should move from Leaflet to Google Maps.
+- Provider-backed route estimation should move from Mapbox and OTP to Google-backed services.
+- External place search and reverse geocoding should move from Nominatim fallback toward Google Places and Geocoding, while preserving local-first search.
+- OTP runtime setup should be treated as legacy support during migration, not as the future desktop model.
+
+## First implementation pass
+
+- Start with `src/services/mapboxRouting.js` and extract the normalized route contract from provider-specific code.
+- Inspect `src/components/MapDisplay.jsx` and decide whether to wrap or replace the Leaflet-specific renderer.
+- Keep `src/App.jsx` stable as the orchestration layer while swapping provider-facing modules underneath it.
+- Treat `src/services/nominatim.js`, `src/platform/desktop/otpDesktop.js`, and `electron/main.cjs` as explicit migration targets rather than permanent architecture.
+- Use `docs/google-migration-plan.md` as the working technical plan before writing provider code.
+
+## Verification focus during migration
+
+- Route estimates still render geometry and durations for walk, car, and transit selections.
+- Optimizer output remains stable when provider responses change.
+- Map context actions still create usable locations with good address data.
+- Provider failure states remain understandable and non-breaking.
+- Paid documentation stays honest about what is already migrated versus still inherited.
 
 ## Planning docs map
 - Product priorities: `docs/roadmap.md`
 - Workstream status: `planning/workstreams.yaml`
 - Task backlog: `planning/backlog.json`
+- Technical migration plan: `docs/google-migration-plan.md`
 - Architecture context: `docs/architecture.md`
 - Change history: `docs/changelog.md`

@@ -1,8 +1,8 @@
 # TripOptimizer
 
-TripOptimizer is a map-first trip planner for London, Ontario. It combines local POI search, saved custom locations, route estimation, itinerary optimization, and an optional desktop-managed OTP transit runtime in a single React + Leaflet interface.
+TripOptimizer is a map-first trip planner for London, Ontario. This paid-version workspace was copied forward from a free-version baseline, so the codebase still contains inherited Leaflet, Mapbox, Nominatim, and OTP integrations while the active product direction is to migrate the map, routing, and place-lookup stack to Google Maps Platform.
 
-This repository is currently suitable as a public preview release: the core planning workflow is implemented, the web build passes, the desktop app loads the production renderer correctly, and the remaining work is primarily around deeper testing, routing realism, and polish rather than missing core scaffolding.
+The core planning workflow is already implemented. The main engineering work now is not basic scaffolding; it is replacing the inherited provider stack without regressing trip planning, itinerary output, or saved-location behavior.
 
 ## How To Share It
 
@@ -29,8 +29,7 @@ Recommended flow:
 - Supports local-first search across POIs and saved custom locations.
 - Falls back to London-bounded geocoding when local search is insufficient.
 - Lets users build a trip list, choose a travel mode, and set explicit start and destination points.
-- Estimates route time using real Mapbox routing or deterministic mock routing.
-- Supports transit estimates through OTP with labeled fallback behavior when transit data is unavailable.
+- Estimates route time through the inherited routing service layer, which currently uses Mapbox or deterministic mock routing for road modes and OTP or fallback behavior for transit-oriented flows.
 - Generates optimized itineraries with time-budget and priority-aware planning modes.
 - Persists trip state and custom nodes in local storage.
 - Exports itinerary views to image or PDF.
@@ -45,36 +44,41 @@ The core product loop is already in place:
 4. Estimate routes or optimize a visit order.
 5. Review the resulting itinerary on the map and in the itinerary panel.
 
-What is still in progress is the realism layer around that loop: higher-quality fallback routing, stronger schedule-feasibility logic, richer POI details, and broader automated test coverage.
+What is still in progress is the paid provider migration around that loop: replacing the current provider dependencies with Google-backed map, routing, and places/geocoding services while keeping the planner behavior stable.
 
 ## Release status
 
-- Public preview / release candidate
+- Paid-version transition workspace
 - Web build and lint are expected to pass locally and in CI
 - Windows desktop packaging is supported through Electron Builder
-- Transit mode can run entirely in mock mode or against a local OTP instance
+- The inherited OTP desktop path still exists in code, but it is no longer the preferred paid-version direction
 - GitHub Actions can build release artifacts separately from the source repository
 
 ## Stack
 
 - React 19
 - Vite 7
-- Leaflet + React Leaflet
+- Leaflet + React Leaflet in the current implementation
 - Lucide React
 - html2canvas + jsPDF
-- Mapbox Directions API for optional live routing
-- OpenTripPlanner for optional transit estimation
+- Mapbox Directions API and OpenTripPlanner in the inherited implementation
+- Google Maps Platform as the target paid integration
 
-## Desktop OTP build
+## Provider transition status
 
-The repository now includes a desktop packaging path that can manage a local OTP runtime for the user.
+Current implementation:
 
-- The Windows desktop build bundles the transit graph assets from `src/data/Transit`.
-- The managed desktop runtime defaults to OTP 2.8.1; the bundled `graph.obj` must be built with a compatible OTP serialization id or startup will be rejected before launch.
-- Inside the app's Settings window, the app detects whether OTP is reachable on the configured local URL.
-- The `Install + Run OTP` button downloads a portable Java 21 runtime and the OTP shaded JAR on first use, then launches OTP against the bundled graph.
-- If the graph was built with a different OTP build, you can override the managed artifact with `TRIPOPTIMIZER_MANAGED_OTP_JAR_PATH` or `TRIPOPTIMIZER_MANAGED_OTP_JAR_URL` plus `TRIPOPTIMIZER_MANAGED_OTP_SERIALIZATION_ID`.
-- After OTP is running, the app can switch off mock transit and route against the local server without any manual OTP setup.
+- `src/components/MapDisplay.jsx` renders the map through Leaflet.
+- `src/services/mapboxRouting.js` owns the normalized route-estimate contract and currently contains both Mapbox/mock road logic and OTP/mock transit logic.
+- `src/services/nominatim.js` provides external search and reverse geocoding fallback.
+- `electron/main.cjs` plus `src/platform/desktop/otpDesktop.js` still expose the inherited managed OTP desktop runtime.
+
+Target paid implementation:
+
+- Replace the map surface with Google Maps.
+- Replace Mapbox and OTP route calls with Google-backed route estimation.
+- Move external search and reverse geocoding toward Google Places and Geocoding while preserving local-first search.
+- Remove or hide OTP-specific desktop/runtime assumptions from the paid app once Google-backed behavior is in place.
 
 ### Desktop development
 
@@ -96,7 +100,7 @@ Artifacts are written to the `release/` folder.
 
 Create a local environment file in the project root. You can start from `.env.example`.
 
-The checked-in template is safe for public sharing and works without Mapbox by default.
+The checked-in template reflects the inherited provider stack, which is still what the code currently runs. Google API configuration is part of the active migration work and is not fully wired yet.
 
 ### Mock routing only
 
@@ -105,14 +109,14 @@ VITE_USE_MOCK_ROUTING=true
 VITE_USE_MOCK_TRANSIT=true
 ```
 
-### Live Mapbox routing
+### Current inherited live routing
 
 ```bash
 VITE_USE_MOCK_ROUTING=false
 VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
 ```
 
-### Schedule-aware transit via OTP
+### Current inherited schedule-aware transit via OTP
 
 ```bash
 VITE_USE_MOCK_TRANSIT=false
@@ -122,7 +126,7 @@ VITE_OTP_TIMEOUT_MS=12000
 
 `VITE_OTP_BASE_URL` may point either at the server root or an `/otp` deployment base, depending on how OpenTripPlanner is hosted.
 
-### Desktop managed OTP overrides
+### Current inherited desktop managed OTP overrides
 
 These environment variables are read by the Electron main process for the packaged/desktop runtime, not by the browser bundle.
 
@@ -133,7 +137,11 @@ TRIPOPTIMIZER_MANAGED_OTP_JAR_URL=https://example.invalid/otp-shaded-custom.jar
 TRIPOPTIMIZER_MANAGED_OTP_JAR_PATH=C:\path\to\otp-shaded-custom.jar
 ```
 
-Use these only when the bundled `graph.obj` was built with an OTP version that does not match the default managed runtime.
+Use these only if you are still exercising the inherited OTP runtime during the migration window.
+
+### Paid-version target configuration
+
+The paid roadmap is moving toward Google API configuration for map rendering, route estimation, places/autocomplete, and geocoding. The exact environment surface for that integration should be finalized alongside the implementation work in `docs/google-migration-plan.md`.
 
 ## Platform layout
 
@@ -142,7 +150,7 @@ Use these only when the bundled `graph.obj` was built with an OTP version that d
 - Electron shell: `electron/`
 - Shared planner UI and logic: `src/`
 
-The current repo still uses one shared React planner for both targets. The web and desktop versions are included together, but the platform-specific entry points are now labeled separately instead of being mixed into the same top-level source path.
+The current repo still uses one shared React planner for both targets. The paid migration is expected to preserve that shared-planner model while swapping provider-facing modules underneath it.
 
 ## Repository status
 
@@ -157,7 +165,7 @@ This repository is currently positioned as a public preview and engineering show
 ## Known limitations
 
 - Mock routing remains a UI-development fallback rather than a road-accurate backup provider.
-- Transit support depends on OTP availability and still needs broader real-world validation.
+- The current provider stack still depends on inherited Mapbox, Nominatim, and OTP behavior that is being phased out for the paid version.
 - The optimization flow is useful today, but schedule-feasibility behavior needs further hardening.
 - Search relevance is functional but still fairly simple.
 - The production bundle should be split more aggressively.
@@ -167,15 +175,16 @@ This repository is currently positioned as a public preview and engineering show
 
 Near-term work is concentrated on:
 
-1. Hardening itinerary feasibility around time windows and user constraints.
-2. Improving routing realism and fallback quality.
-3. Tightening the public-repo experience with cleaner documentation, tests, and automation.
+1. Replacing the inherited map, routing, and place-lookup provider stack with Google Maps Platform.
+2. Keeping planner, itinerary, and optimization behavior regression-safe during the provider swap.
+3. Tightening paid-version documentation, configuration, and release expectations around the new provider model.
 
 ## Project references
 
 - Working tracker: `PROJECT_TRACKER.md`
 - Product roadmap: `docs/roadmap.md`
 - Architecture overview: `docs/architecture.md`
+- Google migration plan: `docs/google-migration-plan.md`
 - Onboarding guide: `docs/onboarding.md`
 - User guide: `docs/user-guide.md`
 - Changelog: `docs/changelog.md`

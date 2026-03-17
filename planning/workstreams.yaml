@@ -6,6 +6,7 @@ meta:
     DONE: Implemented and usable
     PARTIAL: Foundation exists, incomplete workflow
     TODO: Not implemented
+    SUPERSEDED: Replaced by a newer product direction and kept only for history
 
 workstreams:
   - id: location-model
@@ -133,11 +134,11 @@ workstreams:
       - Priority score outperforms nearest-neighbor baseline under equal budget.
       - Existing shortest-feasible mode remains regression-safe.
   - id: real-transit
-    name: Real transit routing integration
-    status: PARTIAL
+    name: OTP transit routing integration
+    status: SUPERSEDED
     owner: Team
     priority: P0
-    notes: OTP provider selection, adapter wiring, fallback handling, visible planner route estimates, richer normalized schedule metadata, cached transit leg lookup, schedule-aware transit optimization, itinerary transit leg rendering, live route color/visibility controls, schedule-triggered route animation, OTP setup/verification docs, runtime transit settings controls, and managed desktop graph/runtime compatibility preflight with override hooks are in place. Desktop transit has a plausible packaged-app path, but browser-hosted/web transit is still not an end-user-ready experience because it requires a reachable OTP backend and deployment/runtime setup outside the app.
+    notes: This workspace inherited a substantial OTP-based transit implementation from the free version, but no further paid-version roadmap work is planned on that provider path. Any unfinished OTP hosting or browser-deployment work is superseded by the Google Maps Platform migration that will become the paid app's primary map and route foundation.
     milestones:
       - id: TR1
         title: Provider comparison and decision
@@ -175,30 +176,48 @@ workstreams:
       - id: TR12
         title: Add runtime transit settings controls
         state: DONE
-    definitionOfDone:
-      - Transit mode uses schedule-aware provider data in non-mock mode.
-      - Planner and itinerary UI both surface multi-leg transit detail and fallback state.
-      - Transit itinerary optimization uses schedule-aware inter-stop costs instead of a flat speed heuristic.
-      - Unavailable scenarios fail gracefully with clear messaging.
-      - Hosted web transit works against a supported OTP deployment without requiring end users to run local infrastructure manually.
-  - id: setup-smoothing
-    name: End-user setup and distribution smoothing
-    status: PARTIAL
+    supersededBy: google-platform-migration
+  - id: google-platform-migration
+    name: Google Maps Platform paid integration
+    status: TODO
     owner: Team
     priority: P0
-    notes: Current friction is still too high outside the packaged desktop path. Today, a source-code user must clone the repo, install Node dependencies, create a local env file, run local commands, open localhost, and optionally provide a Mapbox token for live car routing. Real browser transit additionally requires access to a running OTP backend that is deployed and reachable from the web app. The target state is a clean GitHub release flow for desktop users and a hosted web deployment that works without local setup.
+    notes: Paid-version direction is to replace the inherited Mapbox and OTP provider stack with Google Maps Platform for map rendering, route estimation, and supporting place lookup/geocoding flows while preserving the existing planner and itinerary experience.
+    milestones:
+      - id: GP1
+        title: Replace map rendering with Google Maps JavaScript integration
+        state: TODO
+      - id: GP2
+        title: Add Google routing adapter for drive, walk, and transit estimates
+        state: TODO
+      - id: GP3
+        title: Integrate Google Places and Geocoding for search and map context actions
+        state: TODO
+      - id: GP4
+        title: Normalize Google route payloads for planner and itinerary consumers
+        state: TODO
+      - id: GP5
+        title: Replace OTP and Mapbox settings/docs with paid Google configuration flow
+        state: TODO
+    definitionOfDone:
+      - Map display, route geometry, and route estimates no longer depend on Mapbox in the paid app.
+      - Paid search and reverse-geocoding flows can run against Google APIs with explicit quota and error handling.
+      - The paid app no longer requires OTP runtime setup to access provider-backed routing features.
+      - Planner and itinerary behavior remain regression-safe after the provider swap.
+  - id: setup-smoothing
+    name: End-user setup and distribution smoothing
+    status: SUPERSEDED
+    owner: Team
+    priority: P0
+    notes: The earlier setup-friction workstream is superseded for the paid version. Instead of continuing to optimize end-user OTP deployment and inherited Mapbox setup first, the immediate priority is to complete the Google Maps Platform migration and then revisit packaging and onboarding on top of that provider model.
     milestones:
       - id: SS1
         title: Reduce desktop trial flow to download and run
-        state: TODO
+        state: SUPERSEDED
       - id: SS2
         title: Publish hosted web build with supported backend dependencies
-        state: TODO
+        state: SUPERSEDED
       - id: SS3
         title: Document current versus target user setup paths clearly
-        state: TODO
-    definitionOfDone:
-      - Desktop users can try the app from GitHub Releases without cloning the repo or running terminal commands.
-      - Web users can open a hosted URL without local build steps.
-      - Real web transit works against a supported backend deployment.
-      - Documentation clearly states what works today and what infrastructure is still required.
+        state: SUPERSEDED
+    supersededBy: google-platform-migration

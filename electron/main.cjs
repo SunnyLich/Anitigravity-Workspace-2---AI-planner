@@ -8,7 +8,7 @@ const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const extract = require('extract-zip');
 
-const APP_PRODUCT_NAME = 'TripOptimizer';
+const APP_PRODUCT_NAME = 'Trip Optimizer';
 const APP_USER_MODEL_ID = 'com.anitigravity.tripoptimizer';
 
 app.setName(APP_PRODUCT_NAME);

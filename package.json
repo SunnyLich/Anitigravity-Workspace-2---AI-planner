@@ -1,5 +1,5 @@
 {
-  "name": "Trip Optimizer",
+  "name": "tripoptimizer",
   "description": "Map-first trip planner with itinerary optimization and optional desktop OTP transit routing.",
   "author": "Chi Ho Li",
   "license": "Apache-2.0",

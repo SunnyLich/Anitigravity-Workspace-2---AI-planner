@@ -1,7 +1,7 @@
 {
   "meta": {
     "project": "TripOptimizer",
-    "updated": "2026-03-10",
+    "updated": "2026-03-16",
     "source": "Migrated from PROJECT_TRACKER and PROJECT_TRACKER_SYSTEMATIC"
   },
   "items": [
@@ -650,9 +650,10 @@
       "title": "Capture current end-user setup friction and supported trial paths",
       "workstream": "setup-smoothing",
       "priority": "P0",
-      "status": "todo",
+      "status": "superseded",
       "estimate": "S",
       "owner": "unassigned",
+      "notes": "Superseded by the paid-version decision to prioritize Google Maps Platform migration over documenting the inherited OTP and Mapbox setup burden.",
       "acceptance": [
         "Docs explicitly describe today's desktop trial path as GitHub release download plus run",
         "Docs explicitly describe today's source-code path as clone repo, npm install, local env setup, and localhost usage",
@@ -665,9 +666,10 @@
       "title": "Reduce desktop end-user setup to download and first run only",
       "workstream": "setup-smoothing",
       "priority": "P0",
-      "status": "todo",
+      "status": "superseded",
       "estimate": "M",
       "owner": "unassigned",
+      "notes": "Superseded by the paid-version decision to replace the inherited provider stack first, then revisit desktop onboarding once Google APIs are integrated.",
       "acceptance": [
         "A user can download a packaged desktop build from GitHub Releases and launch it without cloning the repository",
         "Core planner features work in default no-token mode without manual env editing",
@@ -679,9 +681,10 @@
       "title": "Make hosted web transit work against a supported OTP backend",
       "workstream": "real-transit",
       "priority": "P0",
-      "status": "todo",
+      "status": "superseded",
       "estimate": "L",
       "owner": "unassigned",
+      "notes": "Superseded by the paid-version direction to move away from hosted OTP dependencies and use Google APIs for provider-backed routing instead.",
       "acceptance": [
         "A hosted web deployment can request real transit itineraries without requiring end users to run OTP locally",
         "The project documents the supported OTP hosting model, URL expectations, and any required proxy or CORS behavior",
@@ -693,13 +696,84 @@
       "title": "Define browser-ready transit deployment architecture",
       "workstream": "real-transit",
       "priority": "P1",
-      "status": "todo",
+      "status": "superseded",
       "estimate": "M",
       "owner": "unassigned",
+      "notes": "Superseded by the paid-version Google Maps Platform migration plan, which removes the need to standardize a browser-hosted OTP architecture for this workspace.",
       "acceptance": [
         "The team chooses whether hosted web transit will use direct OTP browser access, a proxy API, or another supported server-side adapter",
         "The chosen architecture addresses browser reachability, CORS, secrets handling, and operational ownership",
         "The decision is reflected in docs and implementation planning"
+      ]
+    },
+    {
+      "id": "GP-001",
+      "title": "Replace inherited map surface with Google Maps JavaScript API",
+      "workstream": "google-platform-migration",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "L",
+      "owner": "unassigned",
+      "acceptance": [
+        "The paid app renders its primary interactive map through Google Maps instead of the inherited Leaflet plus Mapbox stack",
+        "Existing trip markers, route overlays, and start/destination visualization remain available after the swap",
+        "Provider initialization failures surface a clear paid-version configuration message"
+      ]
+    },
+    {
+      "id": "GP-002",
+      "title": "Implement Google route estimation adapter for drive, walk, and transit",
+      "workstream": "google-platform-migration",
+      "priority": "P0",
+      "status": "todo",
+      "estimate": "L",
+      "owner": "unassigned",
+      "acceptance": [
+        "Planner route estimates can request Google-backed drive, walk, and transit results through one normalized adapter",
+        "Returned durations, distances, polylines, and notices fit the existing planner and itinerary consumers",
+        "Provider errors and quota limits degrade gracefully instead of breaking optimization flows"
+      ]
+    },
+    {
+      "id": "GP-003",
+      "title": "Integrate Google Places and Geocoding into paid search flows",
+      "workstream": "google-platform-migration",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "Search can use Google place lookup where it improves paid-version quality over the inherited fallback path",
+        "Map context actions can reverse geocode through Google when creating or saving locations",
+        "Normalized location payloads stay compatible with the existing trip planner data model"
+      ]
+    },
+    {
+      "id": "GP-004",
+      "title": "Remove OTP and Mapbox assumptions from paid settings and docs",
+      "workstream": "google-platform-migration",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "Paid-version settings no longer expose OTP runtime controls or Mapbox-specific guidance",
+        "Docs describe Google API keys, enabled services, quota expectations, and billing implications",
+        "Provider copy across the planner reflects the Google-backed paid workflow"
+      ]
+    },
+    {
+      "id": "GP-005",
+      "title": "Define migration-safe provider contract for Google rollout",
+      "workstream": "google-platform-migration",
+      "priority": "P1",
+      "status": "todo",
+      "estimate": "M",
+      "owner": "unassigned",
+      "acceptance": [
+        "A documented normalized contract exists for map, routing, and place results consumed by the app",
+        "Google-specific response handling does not leak into unrelated planner UI components",
+        "The migration plan identifies which inherited OTP and Mapbox modules will be retired or wrapped"
       ]
     }
   ]

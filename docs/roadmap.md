@@ -1,46 +1,42 @@
 # Product Roadmap
 
-Updated: 2026-03-12
+Updated: 2026-03-16
 
 ## Positioning
 
-TripOptimizer has moved past the idea stage. The current application already demonstrates the core workflow end to end, and the roadmap is now focused on improving realism, reliability, and public-repo quality.
+This paid-version workspace starts from a working free-version baseline, but the product direction has changed. The next delivery cycle is centered on replacing the inherited Mapbox and OTP provider stack with Google Maps Platform so the paid app has a single managed map and routing foundation.
 
 ## Current baseline
 
-The product already supports:
+The current application already provides:
 
-- map-based exploration of a London POI dataset
-- local-first search with external fallback
-- saved custom locations
-- explicit trip start and destination selection
-- route estimation for walk, car, and transit-oriented flows
-- itinerary generation with multiple planning modes
-- exportable itinerary views
+- a functioning planner flow with map exploration, custom saved locations, and itinerary generation
+- optimization modes that already handle opening hours, priorities, and time budgets
+- inherited live-provider hooks that currently rely on Mapbox for road routing and OTP for transit-oriented flows
+- a desktop packaging path, even though the inherited OTP setup still adds unnecessary operational complexity for the paid product
 
 ## Now
 
-1. Opening-hours-aware itinerary feasibility and clearer conflict handling.
-2. Hardening the time-constrained optimization path.
-3. Improving routing provider behavior and fallback realism.
-4. Cleaning up repository quality signals: lint, tests, CI, and documentation consistency.
+1. Replace the inherited map surface with Google Maps in the paid app.
+2. Replace Mapbox and OTP route-estimation dependencies with Google-backed routing services.
+3. Define a migration-safe provider contract so planner, itinerary, and optimization behavior remain stable during the swap.
+4. Update configuration, documentation, and release planning around Google API keys, service enablement, quotas, and billing controls.
 
 ## Next
 
-1. Replace the current mock-routing fallback with a more realistic backup provider.
-2. Improve local search relevance with fuzzy and weighted scoring.
-3. Expand POI detail quality so results are more informative to end users.
-4. Improve the UI clarity of travel-mode state and planner feedback.
-5. Expand custom node editing beyond rename-only workflows.
+1. Migrate search, autocomplete, and reverse geocoding toward Google Places and Geocoding where they improve the paid UX.
+2. Remove or hide OTP- and Mapbox-specific settings, copy, and operational assumptions from the paid build.
+3. Revalidate route overlays, itinerary rendering, and optimization timing against Google responses.
+4. Align desktop and hosted deployments around the same paid provider model.
 
 ## Later
 
-1. Add a more complete in-app settings and help surface.
-2. Improve onboarding, diagnostics, and failure messaging.
-3. Add richer testing around optimization behavior and routing edge cases.
+1. Expand paid-only quality work around provider diagnostics, reliability, and usage telemetry.
+2. Add stronger automated coverage for provider normalization and failure-mode handling.
+3. Revisit broader onboarding simplification after the Google migration is complete.
 
 ## Non-goals for the current cycle
 
-1. Replacing the core frontend stack.
-2. Expanding beyond London-focused validation before the existing planning workflow is more robust.
-3. Shipping major new surfaces unrelated to trip planning, routing, or itinerary quality.
+1. Further investment in the inherited OTP deployment path for the paid version.
+2. Additional Mapbox-specific feature work beyond what is needed to bridge the migration.
+3. Major new surfaces unrelated to provider migration, routing quality, or itinerary reliability.

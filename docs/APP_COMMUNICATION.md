@@ -2,6 +2,8 @@
 
 This document explains how files communicate in this project and where each piece of logic lives.
 
+The current code still reflects the inherited free-version provider stack. For the paid version, the communication paths below remain the right seams, but the provider-facing modules are expected to migrate from Leaflet, Mapbox, Nominatim, and OTP toward Google Maps Platform.
+
 ## 1) High-level architecture
 
 The app follows a **single-state-owner pattern**:
@@ -24,6 +26,7 @@ Owns and coordinates:
 - Trip session state: `locations`, `travelMethod`, `tripDate`, selected endpoints.
 - Optimization outputs: `itinerary`, `routeEstimate`, `routeEndpoints`.
 - Map interaction state: context menu, map focus target, custom node draft.
+- Provider/runtime state: current mock-transit toggle, OTP base URL, and desktop OTP runtime status.
 - Persistence: reads/writes `localStorage` keys for custom nodes, trip locations, travel method, selected endpoints.
 - Cross-window behavior: toggles `TripFormWindow` and `ItineraryWindow`.
 
@@ -39,6 +42,7 @@ Important callbacks created in `App.jsx` and passed down:
 Consumes props from `App.jsx` and emits user intents upward:
 
 - Search input → runs local search first, then external Nominatim fallback.
+- Search input is the future seam for Google Places or Google Geocoding integration after local-first matching.
 - Add/remove trip locations through `onAddLocation` / `onRemoveLocation`.
 - Save a location into saved locations through `onSaveLocation`.
 - Start/destination selectors call `onSetStart` / `onSetDestination`.
@@ -62,6 +66,8 @@ Emits map interaction events upward:
 
 `App.jsx` handles these events to open map context menu and create/add locations.
 
+This component is the main renderer migration seam because it currently couples the map surface and geometry overlays directly to Leaflet primitives.
+
 ### `src/components/ItineraryWindow.jsx` (itinerary editing/export)
 
 Receives itinerary from `App.jsx`, allows time edits, and emits updates:
@@ -71,8 +77,10 @@ Receives itinerary from `App.jsx`, allows time edits, and emits updates:
 
 ### Services
 
-- `src/services/nominatim.js`: external location search.
-- `src/services/mapboxRouting.js`: route estimation (mock or Mapbox API).
+- `src/services/nominatim.js`: current external location search and reverse geocoding.
+- `src/services/mapboxRouting.js`: current normalized route estimation layer for mock, Mapbox, and OTP-backed flows.
+
+For the paid version, these services should be replaced or wrapped behind provider-neutral interfaces so `App.jsx` and the UI components do not need Google-specific response handling.
 
 ### Utils
 
@@ -101,6 +109,8 @@ Receives itinerary from `App.jsx`, allows time edits, and emits updates:
 5. For first/last itinerary stops, `getRouteEstimate(...)` is called.
 6. `routeEstimate.geometry` is passed to `MapDisplay` for gradient route lines.
 
+This is the most important provider migration path because it touches planner feedback, itinerary rendering, and optimization timing assumptions.
+
 ## C. Map context-menu flow
 
 1. User right-clicks map or POI in `MapDisplay`.
@@ -109,6 +119,8 @@ Receives itinerary from `App.jsx`, allows time edits, and emits updates:
 4. User chooses action:
    - **Set Location** → create/normalize location, add to trip, set start/destination when empty.
    - **Create Saved Location Here** → opens draft form and saves into `customNodes`.
+
+Reverse-geocoding behavior for this flow currently comes from `src/services/nominatim.js` and is a direct migration target for Google Geocoding.
 
 ## D. Itinerary edit flow
 
@@ -147,3 +159,11 @@ This keeps UI components relatively thin and makes communication paths easy to t
 4. `src/components/MapDisplay.jsx` → map event output + route rendering.
 5. `src/components/ItineraryWindow.jsx` → itinerary mutation + export.
 6. `src/services/*` + `src/utils/*` → pure logic and external calls.
+
+## 6) Paid migration seams
+
+1. `src/App.jsx` should stop importing provider-specific modules directly and instead depend on a provider-neutral routing and lookup layer.
+2. `src/components/MapDisplay.jsx` should be treated as a controlled rewrite because it is deeply Leaflet-specific.
+3. `src/services/mapboxRouting.js` should be decomposed so the normalized route contract survives while provider code changes underneath it.
+4. `src/services/nominatim.js` should be replaced or wrapped by Google Places and Geocoding integration without disturbing local-first search.
+5. `src/platform/desktop/otpDesktop.js` and `electron/main.cjs` should be retired from the paid workflow once OTP is no longer needed.
