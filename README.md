@@ -4,25 +4,6 @@ TripOptimizer is a map-first trip planner for London, Ontario. This paid-version
 
 The core planning workflow is already implemented. The main engineering work now is not basic scaffolding; it is replacing the inherited provider stack without regressing trip planning, itinerary output, or saved-location behavior.
 
-## How To Share It
-
-Use GitHub for two separate things:
-
-- Source code stays in the repository.
-- End-user downloads should come from GitHub Actions artifacts or GitHub Releases, not from asking users to run the repo locally.
-
-This repo now includes:
-
-- CI validation in `.github/workflows/ci.yml`
-- release build automation in `.github/workflows/release.yml`
-
-Recommended flow:
-
-1. Push source code to GitHub.
-2. Run the `Release Builds` workflow manually, or push a tag like `v1.0.1`.
-3. Share the generated desktop `.exe` files from GitHub Releases.
-4. Optionally deploy the `dist/` web artifact separately if you want a hosted browser version.
-
 ## What the app does today
 
 - Renders a full-screen interactive map with a London POI dataset.
